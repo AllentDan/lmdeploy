@@ -1,12 +1,12 @@
 # Copyright (c) OpenMMLab. All rights reserved.
 # modify from: https://github.com/ModelTC/lightllm
+import math
+
 import torch
 import triton
 import triton.language as tl
-import math
 
-
-assert triton.__version__ >= "2.1.0"
+assert triton.__version__ >= '2.1.0'
 
 LOG2 = math.log(2)
 
@@ -40,9 +40,8 @@ def get_slope(i, n):
     if i < closest_power_of_2:
         return _get_interleave_power_of_2(i, closest_power_of_2)
     else:
-        return _get_interleave_power_of_2(
-            (i - closest_power_of_2) * 2, 2 * closest_power_of_2
-        )
+        return _get_interleave_power_of_2((i - closest_power_of_2) * 2,
+                                          2 * closest_power_of_2)
 
 
 @triton.jit
@@ -89,28 +88,18 @@ def _fwd_kernel(
 
     block_start_loc = BLOCK_M * start_m
     head_slope = get_slope(
-        cur_head.to(tl.float32) + head_offset, num_heads.to(tl.float32)
-    )
+        cur_head.to(tl.float32) + head_offset, num_heads.to(tl.float32))
 
     # initialize offsets
     offs_n = tl.arange(0, BLOCK_N)
     offs_d = tl.arange(0, BLOCK_DMODEL)
     offs_m = start_m * BLOCK_M + tl.arange(0, BLOCK_M)
-    off_q = (
-        (cur_batch_in_all_start_index + offs_m[:, None]) * stride_qbs
-        + cur_head * stride_qh
-        + offs_d[None, :] * stride_qd
-    )
-    off_k = (
-        offs_n[None, :] * stride_kbs
-        + cur_kv_head * stride_kh
-        + offs_d[:, None] * stride_kd
-    )
-    off_v = (
-        offs_n[:, None] * stride_vbs
-        + cur_kv_head * stride_vh
-        + offs_d[None, :] * stride_vd
-    )
+    off_q = ((cur_batch_in_all_start_index + offs_m[:, None]) * stride_qbs +
+             cur_head * stride_qh + offs_d[None, :] * stride_qd)
+    off_k = (offs_n[None, :] * stride_kbs + cur_kv_head * stride_kh +
+             offs_d[:, None] * stride_kd)
+    off_v = (offs_n[:, None] * stride_vbs + cur_kv_head * stride_vh +
+             offs_d[None, :] * stride_vd)
 
     q = tl.load(Q + off_q, mask=offs_m[:, None] < cur_batch_seq_len, other=0.0)
 
@@ -120,7 +109,7 @@ def _fwd_kernel(
     block_offset_ptrs = Block_offsets + cur_batch * stride_boffb
 
     # initialize pointer to m and l
-    m_i = tl.zeros([BLOCK_M], dtype=tl.float32) - float("inf")
+    m_i = tl.zeros([BLOCK_M], dtype=tl.float32) - float('inf')
     l_i = tl.zeros([BLOCK_M], dtype=tl.float32)
     acc = tl.zeros([BLOCK_M, BLOCK_DMODEL], dtype=tl.float32)
 
@@ -182,11 +171,8 @@ def _fwd_kernel(
         l_i = l_i_new
         m_i = m_i_new
     # initialize pointers to output
-    off_o = (
-        (cur_batch_in_all_start_index + offs_m[:, None]) * stride_obs
-        + cur_head * stride_oh
-        + offs_d[None, :] * stride_od
-    )
+    off_o = ((cur_batch_in_all_start_index + offs_m[:, None]) * stride_obs +
+             cur_head * stride_oh + offs_d[None, :] * stride_od)
     out_ptrs = Out + off_o
     tl.store(out_ptrs, acc, mask=offs_m[:, None] < cur_batch_seq_len)
 
