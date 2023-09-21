@@ -476,6 +476,9 @@ class Chatbot:
         preseq_length = session.sequence_length
         session.response = ''
         session.status = StatusCode.TRITON_SESSION_READY
+        filters = [self.eos_id]
+        if self.cfg.stop_words is not None:
+            filters += self.cfg.stop_words.flatten().tolist()
 
         que = queue.Queue()
         producer = threading.Thread(target=self._stream_producer,
@@ -487,7 +490,7 @@ class Chatbot:
         for status, res, n_token in self.stream_consumer(
                 self.postprocess, que, session, input_tokens, preseq_length,
                 cancel, logger, self.display, self.profile_generation,
-                self.eos_id):
+                filters):
             yield status, res, n_token
 
         producer.join()
@@ -581,7 +584,7 @@ class Chatbot:
     @staticmethod
     def stream_consumer(postprocess, res_queue, session, n_input_token,
                         preseq_length, cancel, logger, display,
-                        profile_generation, eos_id):
+                        profile_generation, filters):
         """Consume the response from the triton inference server.
 
         Args:
@@ -596,6 +599,7 @@ class Chatbot:
             display (bool): display the text in the consolo interface or not
             profile_generation (bool): indicator for profiling token generation
             eos_id (int): eos token id
+            stop_words (List[int]): stop words and eos token id
 
         Yields:
             tuple: status, text, generated token number
@@ -634,7 +638,7 @@ class Chatbot:
                                         )]
                 last_token_id = None if output_ids.shape[
                     -1] == 0 else output_ids[-1, -1, -1]
-                if last_token_id == eos_id:
+                if last_token_id in filters:
                     session.sequence_length = session.sequence_length - 1
                     output_ids = output_ids[:, :, :-1]
 

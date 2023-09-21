@@ -305,9 +305,11 @@ class TurboMindInstance:
 
         if ignore_eos:
             stop_words = None
+            filters = [self.eos_id]
             bad_words = torch.tensor([[[self.eos_id], [1]]], dtype=torch.int32)
         else:
             stop_words = self.stop_words
+            filters = [self.eos_id] + stop_words.flatten().tolist()
             bad_words = None
 
         if stop_words is not None:
@@ -344,7 +346,7 @@ class TurboMindInstance:
             outputs = []
             for output, len_ in zip(output_ids, sequence_length):
                 output, len_ = output, len_.item()
-                if len(output) > 0 and output[-1].item() == self.eos_id:
+                if len(output) > 0 and output[-1].item() in filters:
                     outputs.append((output[:-1], len_ - 1))
                 else:
                     outputs.append((output, len_))
