@@ -64,11 +64,12 @@ class SchedulerSession:
         self.status: MessageStatus = MessageStatus.RUNNING
         self.sequences: Dict[int, SchedulerSequence] = dict()
 
-    def add_sequence(
-            self,
-            token_ids: Tensor,
-            max_output_len: int = 512,
-            sampling_param: SamplingParam = None) -> 'SchedulerSequence':
+    def add_sequence(self,
+                     token_ids: Tensor,
+                     max_output_len: int = 512,
+                     sampling_param: SamplingParam = None,
+                     output_last_hidden_state=False,
+                     output_logits=False) -> 'SchedulerSequence':
         """Add a new message."""
         if not isinstance(token_ids, Tensor):
             token_ids = torch.tensor(token_ids)
@@ -77,13 +78,16 @@ class SchedulerSession:
         if sampling_param is None:
             sampling_param = SamplingParam()
 
-        seq = SchedulerSequence(seq_id=_new_msg_id(),
-                                token_ids=token_ids,
-                                session=self,
-                                status=MessageStatus.WAITING,
-                                remain_output_len=max_output_len,
-                                sampling_param=sampling_param,
-                                arrive_time=time.time())
+        seq = SchedulerSequence(
+            seq_id=_new_msg_id(),
+            token_ids=token_ids,
+            session=self,
+            output_last_hidden_state=output_last_hidden_state,
+            output_logits=output_logits,
+            status=MessageStatus.WAITING,
+            remain_output_len=max_output_len,
+            sampling_param=sampling_param,
+            arrive_time=time.time())
         self.sequences[seq.seq_id] = seq
         return seq
 
@@ -112,7 +116,8 @@ class SchedulerSession:
             logical_blocks=deepcopy(seq.logical_blocks),
             sampling_param=sampling_param,
             arrive_time=time.time(),
-            meta=deepcopy(seq.meta))
+            meta=deepcopy(seq.meta),
+            output_last_hidden_state=seq.output_last_hidden_state)
 
         self.sequences[new_msg.seq_id] = new_msg
         return new_msg
@@ -131,6 +136,8 @@ class SchedulerSequence:
     logical_blocks: Sequence[LogicalTokenBlock] = field(default_factory=list)
     arrive_time: float = 0.0
     meta: Any = None
+    output_last_hidden_state: bool = False
+    output_logits: bool = False
 
     @property
     def history_len(self) -> int:

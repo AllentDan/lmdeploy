@@ -11,6 +11,7 @@ from typing import Any, Callable, Dict, List
 
 import torch
 import torch.distributed as dist
+import torch.nn.functional as F
 from torch import multiprocessing as mp
 from torch.distributed._tensor import DeviceMesh, Replicate, distribute_tensor
 from transformers import AutoConfig, AutoModelForCausalLM
@@ -40,6 +41,7 @@ class RequestType(enum.Enum):
 
     ADD_SESSION = enum.auto()
     ADD_MESSAGE = enum.auto()
+
     STOP_SESSION = enum.auto()
     END_SESSION = enum.auto()
     STOP_ENGINE = enum.auto()
@@ -85,6 +87,7 @@ class InferOutput:
     req_id: int = 0
     finish: bool = False
     logits: torch.Tensor = None
+    last_hidden_state: List[int] = None
 
 
 class ModelContext:
@@ -642,6 +645,9 @@ class Engine:
         history_lengths = [msg.history_len for msg in messages]
 
         token_ids = [msg.token_ids for msg in messages]
+        output_logits = any([msg.output_logits for msg in messages])
+        output_last_hidden_state = any(
+            [msg.output_last_hidden_state for msg in messages])
 
         if isinstance(token_ids[0], int):
             token_ids = [token_ids]
@@ -673,6 +679,8 @@ class Engine:
             input_ids=input_ids,
             seq_length=seq_length,
             attention_mask=attention_mask,
+            output_logits=output_logits,
+            output_last_hidden_state=output_last_hidden_state,
             block_offsets=block_offsets,
             position_ids=position_ids,
             q_start_loc=q_start_loc,
@@ -757,7 +765,7 @@ class Engine:
                     past_key_values=self.cache_engine.gpu_cache,
                     return_dict=True,
                     output_attentions=False,
-                    output_hidden_states=False,
+                    output_hidden_states=inputs['output_last_hidden_state'],
                     use_origin=False,
                     context=ModelContext(
                         block_offsets=inputs['block_offsets'],
@@ -768,7 +776,9 @@ class Engine:
                     ),
                     q_seq_info=(inputs['q_start_loc'], inputs['seq_length']),
                 )
-                return output['logits']
+                if inputs['output_last_hidden_state']:
+                    return output['logits'], output['hidden_states'][-1]
+                return output['logits'], None
 
         else:
             with torch.no_grad():
@@ -781,11 +791,8 @@ class Engine:
 
             return output
 
-    def step(self, return_logits=False):
+    def step(self, **kwargs):
         """one step inference. Used to perform streaming chat.
-
-        Args:
-            return_logits (bool): Weither to return the output logits.
 
         Returns:
             Dict[int, InferOutput]: The output of each session.
@@ -809,7 +816,8 @@ class Engine:
         inputs['history_lengths'] = history_lengths
 
         # inference
-        logits = self._model_forward(inputs, swap_in_map, swap_out_map)
+        logits, last_hidden_states = self._model_forward(
+            inputs, swap_in_map, swap_out_map)
 
         logits = logits[0]  # [bs, seq, prob] -> [seq, prob]
 
@@ -826,7 +834,7 @@ class Engine:
 
         next_token_ids = []
         for msg, logit, param in zip(running, split_logits, sampling_params):
-            input_ids = torch.tensor(msg.token_ids)
+            input_ids = msg.token_ids.clone().detach()
             logits_processor = LogitsProcessorList([
                 TopKLogitsWarper(param.top_k),
                 TopPLogitsWarper(param.top_p),
@@ -856,9 +864,12 @@ class Engine:
             )
             outputs[session_id] = out
 
-        if return_logits:
-            for idx in range(len(session_ids)):
+        for idx in range(len(session_ids)):
+            if running[idx].output_logits:
                 outputs[session_ids[idx]].logits = split_logits[idx]
+            if running[idx].output_last_hidden_state:
+                outputs[session_ids[
+                    idx]].last_hidden_state = last_hidden_states[idx]
         return outputs
 
     def infer(self, return_logits: bool = False):
@@ -1025,7 +1036,10 @@ class Engine:
                     sess.add_sequence(
                         req.data['token_ids'],
                         max_output_len=req.data['max_request_output_len'],
-                        sampling_param=req.data['sampling_param'])
+                        sampling_param=req.data['sampling_param'],
+                        output_last_hidden_state=req.data.get(
+                            'output_last_hidden_state', False),
+                        output_logits=req.data.get('output_logits', False))
                     msg = next(iter(sess.sequences.values()))
                     self.add_message(msg)
                 else:
@@ -1048,7 +1062,8 @@ class Engine:
                     Response(
                         type=resp_type,
                         req_id=out.req_id,
-                        data=dict(token_ids=out.token_ids),
+                        data=dict(token_ids=out.token_ids,
+                                  last_hidden_state=out.last_hidden_state),
                     ))
 
 
@@ -1200,6 +1215,64 @@ class EngineInstance:
                 break
 
         return (status, token_ids, len(token_ids))
+
+    def embedding(
+            self,
+            session_id: int,
+            input_ids: List[int],
+            attention_mask: torch.Tensor,
+            sampling_param: SamplingParam = SamplingParam(),
+    ):
+        """Send inference request.
+
+        Args:
+            session_id (int): The session id.
+            input_ids (List[int]): The input token ids.
+            sampling_param (SamplingParam): The sampling param of the output.
+
+        Returns:
+            int: Error flags. 0 if success.
+            List[float]: The embedding output.
+            int: The number of the output tokens.
+        """
+        self._try_add_session(session_id)
+        req_id = self.req_count
+        msg = dict(token_ids=input_ids,
+                   session_id=session_id,
+                   max_request_output_len=1,
+                   req_id=req_id,
+                   sampling_param=sampling_param,
+                   output_last_hidden_state=True)
+        self._send_req(RequestType.ADD_MESSAGE, msg)
+
+        last_hidden_state = None
+        status = 0
+        while True:
+            if not self.engine.loop_threads.is_alive():
+                status = 1
+                break
+
+            resp: Response = self.response.get()
+            if resp.req_id != req_id:
+                continue
+            if resp.type == ResponseType.SUCCESS:
+                last_hidden_state = resp.data['last_hidden_state']
+            elif resp.type == ResponseType.FINISH:
+                last_hidden_state = resp.data['last_hidden_state']
+                break
+            else:
+                status = 1
+                break
+        attention_mask = attention_mask.to(last_hidden_state.device)
+        mask = attention_mask.unsqueeze(-1).expand(
+            last_hidden_state.size()).float()
+        masked_embeddings = last_hidden_state * mask
+        sum_embeddings = torch.sum(masked_embeddings, dim=0)
+        token_num = torch.sum(attention_mask).item()
+        embedding = sum_embeddings / token_num
+        out_embeddings = F.normalize(embedding, p=2, dim=0).tolist()
+
+        return (status, out_embeddings, token_num)
 
     def end(self, session_id: int):
         """End the given session."""

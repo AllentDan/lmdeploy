@@ -29,14 +29,18 @@ class AsyncEngine:
     """
 
     def __init__(self, model_path, instance_num=32, tp=1) -> None:
-        from lmdeploy import turbomind as tm
+        self.is_hf = osp.exists(osp.join(model_path, 'config.json'))
+        if self.is_hf:
+            from lmdeploy.pytorch_poc.engine import Engine
+        else:
+            from lmdeploy.turbomind import TurboMind as Engine
         from lmdeploy.tokenizer import Tokenizer
         tokenizer_model_path = osp.join(model_path, 'triton_models',
                                         'tokenizer')
         tokenizer = Tokenizer(tokenizer_model_path)
-        self.tm_model = tm.TurboMind(model_path,
-                                     eos_id=tokenizer.eos_token_id,
-                                     tp=tp)
+        self.tm_model = Engine(model_path,
+                               eos_id=tokenizer.eos_token_id,
+                               tp=tp)
         self.tokenizer = tokenizer
         self.generators = [
             self.tm_model.create_instance() for i in range(instance_num)
