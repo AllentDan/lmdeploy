@@ -1,5 +1,6 @@
 # Copyright (c) OpenMMLab. All rights reserved.
 import os
+import random
 import time
 from http import HTTPStatus
 from typing import AsyncGenerator, List, Optional
@@ -35,7 +36,7 @@ def get_model_list():
 
     Only provided one now.
     """
-    return [VariableInterface.async_engine.tm_model.model_name]
+    return [VariableInterface.async_engine.model_name]
 
 
 @app.get('/v1/models')
@@ -231,10 +232,9 @@ async def create_embeddings(request: EmbeddingsRequest,
     if error_check_ret is not None:
         return error_check_ret
 
-    embedding = await VariableInterface.async_engine.get_embeddings(
-        request.input)
-    data = [{'object': 'embedding', 'embedding': embedding, 'index': 0}]
-    token_num = len(embedding)
+    _, embed, token_num = await VariableInterface.async_engine.get_embeddings(
+        request.input, session_id=random.randint(0, 10000))
+    data = [{'object': 'embedding', 'embedding': embed, 'index': 0}]
     return EmbeddingsResponse(
         data=data,
         model=request.model,
@@ -318,15 +318,17 @@ async def generate(request: GenerateRequest, raw_request: Request = None):
         return JSONResponse(ret)
 
 
-def main(model_path: str,
-         server_name: str = 'localhost',
-         server_port: int = 23333,
-         instance_num: int = 32,
-         tp: int = 1,
-         allow_origins: List[str] = ['*'],
-         allow_credentials: bool = True,
-         allow_methods: List[str] = ['*'],
-         allow_headers: List[str] = ['*']):
+def main(
+        model_path: str,
+        model_name: str = None,  # for huggingface model, None for turbomind
+        server_name: str = 'localhost',
+        server_port: int = 23333,
+        instance_num: int = 32,
+        tp: int = 1,
+        allow_origins: List[str] = ['*'],
+        allow_credentials: bool = True,
+        allow_methods: List[str] = ['*'],
+        allow_headers: List[str] = ['*']):
     """An example to perform model inference through the command line
     interface.
 
@@ -352,7 +354,8 @@ def main(model_path: str,
 
     VariableInterface.async_engine = AsyncEngine(model_path=model_path,
                                                  instance_num=instance_num,
-                                                 tp=tp)
+                                                 tp=tp,
+                                                 model_name=model_name)
     uvicorn.run(app=app, host=server_name, port=server_port, log_level='info')
 
 

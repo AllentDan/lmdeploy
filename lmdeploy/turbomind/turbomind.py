@@ -78,7 +78,11 @@ class TurboMind:
         tp (int): tensor parallel
     """
 
-    def __init__(self, model_path: str, eos_id: int = 2, tp: int = 1):
+    def __init__(self,
+                 model_path: str,
+                 eos_id: int = 2,
+                 tp: int = 1,
+                 **kwargs):
         self.eos_id = eos_id
 
         # TODO: support mpi

@@ -459,14 +459,13 @@ class Engine:
         tp (int): Number of tensor parallel.
     """
 
-    def __init__(
-        self,
-        model_path: str,
-        scheduler_config: SchedulerConfig = None,
-        cache_config: CacheConfig = None,
-        tp: int = 1,
-        trust_remote_code=True,
-    ) -> None:
+    def __init__(self,
+                 model_path: str,
+                 scheduler_config: SchedulerConfig = None,
+                 cache_config: CacheConfig = None,
+                 tp: int = 1,
+                 trust_remote_code=True,
+                 **kwargs) -> None:
 
         self.tp = tp
         self.gpu_count = tp
@@ -1221,7 +1220,7 @@ class EngineInstance:
             session_id: int,
             input_ids: List[int],
             attention_mask: torch.Tensor,
-            sampling_param: SamplingParam = SamplingParam(),
+            sampling_param: SamplingParam = SamplingParam(top_k=40),
     ):
         """Send inference request.
 

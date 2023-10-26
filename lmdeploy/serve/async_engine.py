@@ -6,6 +6,8 @@ import random
 from contextlib import contextmanager
 from typing import Literal, Optional
 
+import torch
+
 from lmdeploy.model import MODELS, BaseModel
 
 
@@ -28,15 +30,22 @@ class AsyncEngine:
         tp (int): tensor parallel
     """
 
-    def __init__(self, model_path, instance_num=32, tp=1) -> None:
+    def __init__(self,
+                 model_path,
+                 instance_num=32,
+                 tp=1,
+                 model_name: str = None) -> None:
         self.is_hf = osp.exists(osp.join(model_path, 'config.json'))
         if self.is_hf:
             from lmdeploy.pytorch_poc.engine import Engine
+            assert model_name is not None, 'please set model_name for hf model'
+            self.model_name = model_name
+            tokenizer_model_path = model_path
         else:
             from lmdeploy.turbomind import TurboMind as Engine
+            tokenizer_model_path = osp.join(model_path, 'triton_models',
+                                            'tokenizer')
         from lmdeploy.tokenizer import Tokenizer
-        tokenizer_model_path = osp.join(model_path, 'triton_models',
-                                        'tokenizer')
         tokenizer = Tokenizer(tokenizer_model_path)
         self.tm_model = Engine(model_path,
                                eos_id=tokenizer.eos_token_id,
@@ -46,7 +55,9 @@ class AsyncEngine:
             self.tm_model.create_instance() for i in range(instance_num)
         ]
         self.instance_num = instance_num
-        self.model: BaseModel = MODELS.get(self.tm_model.model_name)()
+        if not self.is_hf:
+            self.model_name = self.tm_model.model_name
+        self.model: BaseModel = MODELS.get(self.model_name)()
         self.available = [True] * instance_num
         self.starts = [None] * instance_num
         self.steps = {}
@@ -73,11 +84,22 @@ class AsyncEngine:
             self.stop_session(session_id)
         self.available[instance_id] = True
 
-    async def get_embeddings(self, prompt, do_prerpocess=False):
+    async def get_embeddings(self, prompt, session_id, do_prerpocess=False):
+        assert self.is_hf, 'only supported by pytorch model'
         if do_prerpocess:
             prompt = self.model.get_prompt(prompt)
         input_ids = self.tokenizer.encode(prompt)
-        return input_ids
+        attention_mask = torch.tensor(
+            input_ids) != self.tokenizer.model.model.pad_token_id
+        instance_id = session_id % self.instance_num
+        generator = await self.get_generator(instance_id)
+        status, out_embeddings, token_num = generator.embedding(
+            session_id=session_id,
+            input_ids=input_ids,
+            attention_mask=attention_mask)
+        generator.end(session_id)  # TODO safer scheduler
+
+        return status, out_embeddings, token_num
 
     async def get_generator(self, instance_id: int, stop: bool = False):
         """Only return the model instance if it is available."""
