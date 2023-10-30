@@ -1,4 +1,5 @@
 # Copyright (c) OpenMMLab. All rights reserved.
+import asyncio
 import enum
 import itertools
 import json
@@ -1108,6 +1109,36 @@ class EngineInstance:
             self._send_req(RequestType.ADD_SESSION,
                            dict(session_id=session_id))
             self.owned_sessions.append(session_id)
+
+    async def async_stream_infer(self,
+                                 session_id,
+                                 input_ids,
+                                 request_output_len: int = 512,
+                                 sequence_start: bool = True,
+                                 sequence_end: bool = False,
+                                 top_p=0.8,
+                                 top_k=40,
+                                 temperature=0.8,
+                                 repetition_penalty=1.0,
+                                 ignore_eos=False,
+                                 random_seed=None,
+                                 **kwargs):
+        sampling_param = SamplingParam(top_p=top_p,
+                                       top_k=top_k,
+                                       temperature=temperature,
+                                       repetition_penalty=repetition_penalty,
+                                       ignore_eos=ignore_eos,
+                                       random_seed=random_seed)
+        input_ids = input_ids[0]
+        for output in self.stream_infer(session_id,
+                                        input_ids,
+                                        request_output_len,
+                                        sampling_param=sampling_param,
+                                        **kwargs):
+            # Allow the pipeline add new requests into the queue.
+            await asyncio.sleep(0)
+            yield [torch.stack(output[1]),
+                   output[2]],  # compatible with turbomind
 
     def stream_infer(self,
                      session_id: int,
