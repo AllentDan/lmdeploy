@@ -42,12 +42,14 @@ class TurbomindModelConfig:
     weight_type: str = 'fp16'
     rotary_embedding: int = 128
     rope_theta: float = 10000.0
+    rope_scaling_factor: float = 0.0
     size_per_head: int = 128
     group_size: int = 0
     max_batch_size: int = 32
     max_context_token_num: int = 4
     step_length: int = 1
     cache_max_entry_count: int = 48
+    cache_block_seq_len: int = 384
     cache_chunk_size: int = 1
     use_context_fmha: int = 1
     quant_policy: int = 0

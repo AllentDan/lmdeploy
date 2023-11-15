@@ -39,7 +39,8 @@ async def chat_stream_local(
             session_id,
             stream_response=True,
             sequence_start=(len(state_chatbot) == 1),
-            sequence_end=False):
+            sequence_end=False,
+            repetition_penalty=1.1):
         response = outputs.response
         if outputs.finish_reason == 'length':
             gr.Warning('WARNING: exceed session max length.'
@@ -118,7 +119,8 @@ def run_local(model_path: str,
               server_name: str = 'localhost',
               server_port: int = 6006,
               batch_size: int = 4,
-              tp: int = 1):
+              tp: int = 1,
+              **kwargs):
     """chat with AI assistant through web ui.
 
     Args:
@@ -130,7 +132,8 @@ def run_local(model_path: str,
     """
     InterFace.async_engine = AsyncEngine(model_path=model_path,
                                          instance_num=batch_size,
-                                         tp=tp)
+                                         tp=tp,
+                                         **kwargs)
 
     with gr.Blocks(css=CSS, theme=THEME) as demo:
         state_chatbot = gr.State([])

@@ -186,6 +186,8 @@ class LlamaModel(BaseInputModel):
             else:
                 kv_head_num = model_arg['num_attention_heads']
             rope_theta = float(model_arg.get('rope_theta', 10000.0))
+            rope_scaling_factor = float(
+                model_arg.get('rope_scaling', {}).get('factor', 0))
             max_position_embeddings = int(
                 model_arg.get('max_position_embeddings', 0))
             repo_scaling = bool(model_arg.get('rope_scaling', False))
@@ -194,5 +196,6 @@ class LlamaModel(BaseInputModel):
                     norm_eps=norm_eps,
                     kv_head_num=kv_head_num,
                     rope_theta=rope_theta,
+                    rope_scaling_factor=rope_scaling_factor,
                     max_position_embeddings=max_position_embeddings,
                     use_dynamic_ntk=int(repo_scaling))
