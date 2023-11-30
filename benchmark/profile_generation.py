@@ -40,10 +40,7 @@ def infer(model,
                                             sequence_end=True,
                                             ignore_eos=True,
                                             sampling_param=sampling_param):
-            if len(outputs) > 1:
-                res, token = outputs[-2:]
-            else:
-                res, token = outputs[0]
+            _, res, token = outputs
             timestamps.append(time.perf_counter())
             tokens.append(token)
 

@@ -29,7 +29,7 @@ from lmdeploy.pytorch_poc.messages import (MessageStatus, SamplingParam,
 from lmdeploy.pytorch_poc.models import patch
 from lmdeploy.pytorch_poc.paging import Scheduler
 from lmdeploy.pytorch_poc.utils import get_gpu_memory
-from lmdeploy.utils import get_logger
+from lmdeploy.utils import ResponseType, get_logger
 
 from .cache_engine import CacheEngine
 
@@ -45,16 +45,6 @@ class RequestType(enum.Enum):
     END_SESSION = enum.auto()
     STOP_ENGINE = enum.auto()
     RESUME_ENGINE = enum.auto()
-
-
-class ResponseType(enum.Enum):
-    """Response type."""
-
-    SUCCESS = enum.auto()
-    FINISH = enum.auto()
-    ENGINE_STOP_ERROR = enum.auto()
-    REPEAT_ERROR = enum.auto()
-    NOT_EXIST_ERROR = enum.auto()
 
 
 @dataclass
@@ -1162,13 +1152,13 @@ class EngineInstance:
                 continue
             if resp.type == ResponseType.SUCCESS:
                 token_ids += resp.data['token_ids']
-                yield (0, token_ids, len(token_ids))
+                yield (resp.type, token_ids, len(token_ids))
             elif resp.type == ResponseType.FINISH:
                 token_ids += resp.data['token_ids']
-                yield (0, token_ids, len(token_ids))
+                yield (resp.type, token_ids, len(token_ids))
                 break
             else:
-                yield (1, [], 0)
+                yield (resp.type, [], 0)
                 break
 
     async def async_stream_infer(self,

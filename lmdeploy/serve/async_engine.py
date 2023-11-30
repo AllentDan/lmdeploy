@@ -9,6 +9,7 @@ from transformers.utils import ExplicitEnum
 
 from lmdeploy.model import MODELS, BaseModel
 from lmdeploy.tokenizer import Tokenizer
+from lmdeploy.utils import ResponseType
 
 
 @dataclasses.dataclass
@@ -53,7 +54,7 @@ class AsyncEngine:
                                    **kwargs)
             self.model_name = model_name
             self.model: BaseModel = MODELS.get(model_name)(**kwargs)
-        else:
+        elif backend == Backend.TURBOMIND:
             from lmdeploy.turbomind import TurboMind
             self.tm_model = TurboMind.from_pretrained(model_path,
                                                       tp=tp,
@@ -62,6 +63,8 @@ class AsyncEngine:
             self.tokenizer = self.tm_model.tokenizer
             self.model = self.tm_model.model
             self.model_name = self.tm_model.model_name
+        else:
+            raise ValueError(f'unsupported backend {backend}')
         self.generators = [
             self.tm_model.create_instance() for i in range(instance_num)
         ]
@@ -74,35 +77,13 @@ class AsyncEngine:
     def stop_session(self, session_id: int):
         """Stop a session by a session_id."""
         instance_id = session_id % self.instance_num
-        input_ids = self.tokenizer.encode('')
-        if hasattr(self.generators[instance_id], 'cancel'):  # pytorch model
-            self.generators[instance_id].cancel(session_id)
-            return
-        for outputs in self.generators[instance_id].stream_infer(
-                session_id,
-                input_ids,
-                request_output_len=0,
-                sequence_start=False,
-                sequence_end=False,
-                stop=True):
-            pass
+        self.generators[instance_id].cancel(session_id)
         self.available[instance_id] = True
 
     def end_session(self, session_id: int):
         """Clear a session by a session_id."""
         instance_id = session_id % self.instance_num
-        input_ids = self.tokenizer.encode('')
-        if hasattr(self.generators[instance_id], 'end'):  # pytorch model
-            self.generators[instance_id].end(session_id)
-            return
-        for outputs in self.generators[instance_id].stream_infer(
-                session_id,
-                input_ids,
-                request_output_len=0,
-                sequence_start=False,
-                sequence_end=True,
-                stop=True):
-            pass
+        self.generators[instance_id].end(session_id)
         self.steps[str(session_id)] = 0
         self.available[instance_id] = True
 
@@ -235,18 +216,16 @@ class AsyncEngine:
         if do_preprocess:
             prompt = self.model.messages2prompt(prompt, sequence_start)
         input_ids = self.tokenizer.encode(prompt, add_bos=sequence_start)
-        finish_reason = 'stop' if stop else None
         if self.steps[str(session_id)] + len(
                 input_ids) + request_output_len >= self.tm_model.session_len:
-            finish_reason = 'length'
             yield GenOut('', self.steps[str(session_id)], len(input_ids), 0,
-                         finish_reason)
+                         'length')
             if sequence_end is True and sequence_start is False:
                 self.end_session(session_id)
         else:
             generator = await self.get_generator(instance_id, stop)
             with self.safe_run(instance_id, session_id):
-                response_size = 0
+                response_size, finish_reason = 0, None
                 async for outputs in generator.async_stream_infer(
                         session_id=session_id,
                         input_ids=[input_ids],
@@ -262,7 +241,9 @@ class AsyncEngine:
                         repetition_penalty=repetition_penalty,
                         ignore_eos=ignore_eos,
                         random_seed=seed if sequence_start else None):
-                    res, tokens = outputs[0]
+                    status, res, tokens = outputs
+                    if status == ResponseType.FINISH:
+                        finish_reason = 'stop'
                     # decode res
                     response = self.tokenizer.decode(res.tolist(),
                                                      offset=response_size)

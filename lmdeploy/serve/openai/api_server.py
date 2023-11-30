@@ -178,6 +178,7 @@ async def chat_completions_v1(request: ChatCompletionRequest,
             response_json = create_stream_response_json(
                 index=0,
                 text=res.response,
+                finish_reason=res.finish_reason,
             )
             yield f'data: {response_json}\n\n'
         yield 'data: [DONE]\n\n'

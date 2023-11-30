@@ -20,7 +20,7 @@ def main(model_path, inputs):
     """
     tokenizer_model_path = osp.join(model_path, 'triton_models', 'tokenizer')
     tokenizer = Tokenizer(tokenizer_model_path)
-    tm_model = tm.TurboMind(model_path, eos_id=tokenizer.eos_token_id)
+    tm_model = tm.TurboMind(model_path)
     generator = tm_model.create_instance()
 
     with open(inputs, 'r') as f:

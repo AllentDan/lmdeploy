@@ -20,7 +20,7 @@ from torch.nn.utils.rnn import pad_sequence
 import lmdeploy
 from lmdeploy.model import MODELS, BaseModel
 from lmdeploy.tokenizer import Tokenizer
-from lmdeploy.utils import get_logger
+from lmdeploy.utils import ResponseType, get_logger
 
 from .deploy.converter import get_model_format, supported_formats
 from .deploy.source_model.base import INPUT_MODELS
@@ -449,6 +449,24 @@ class TurboMindInstance:
             t.start()
             self.threads[device_id] = t
 
+    def cancel(self, session_id: int):
+        """cancel the current streaming response for session_id."""
+        for outputs in self.stream_infer(session_id, [self.eos_id],
+                                         request_output_len=0,
+                                         sequence_start=False,
+                                         sequence_end=False,
+                                         stop=True):
+            pass
+
+    def end(self, session_id: int):
+        """end session."""
+        for outputs in self.stream_infer(session_id, [self.eos_id],
+                                         request_output_len=0,
+                                         sequence_start=False,
+                                         sequence_end=True,
+                                         stop=True):
+            pass
+
     async def async_stream_infer(self, *args, **kwargs):
         """Async wrapper of self.stream_infer."""
         for output in self.stream_infer(*args, **kwargs):
@@ -585,14 +603,15 @@ class TurboMindInstance:
             sequence_length -= seq_start.to(sequence_length.device)
 
             outputs = []
+            status = ResponseType.FINISH if finish else ResponseType.SUCCESS
             for output, len_ in zip(output_ids, sequence_length):
                 output, len_ = output, len_.item()
                 if len(output) > 0 and output[-1].item() == self.eos_id:
-                    outputs.append((output[:-1], len_ - 1))
+                    outputs = (status, output[:-1], len_ - 1)
                 elif len(output) > 0 and output[-1].item() in self.stop_tokens:
-                    outputs.append((output[:-1], len_))
+                    outputs = (status, output[:-1], len_)
                 else:
-                    outputs.append((output, len_))
+                    outputs = (status, output, len_)
             yield outputs
 
             if finish:

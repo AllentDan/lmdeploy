@@ -102,10 +102,7 @@ class Engine:
                     sequence_end=True,
                     ignore_eos=True,
                     stream_output=stream_output):
-                if len(outputs) > 1:
-                    res, token = outputs[-2:]
-                else:
-                    res, token = outputs[0]
+                _, res, token = outputs
                 self.tokenizer.decode(res, offset)
                 offset = token
                 timestamps.append(time.perf_counter())
