@@ -49,7 +49,6 @@ class AsyncEngine:
         backend_config (EngineConfig): beckend config. Default to none.
         chat_template_config (ChatTemplateConfig): chat template configuration.
             Default to None.
-        instance_num (int): instance numbers to be created
         tp (int): tensor parallel
     """
 
@@ -60,7 +59,6 @@ class AsyncEngine:
                  backend_config: Optional[Union[TurbomindEngineConfig,
                                                 PytorchEngineConfig]] = None,
                  chat_template_config: Optional[ChatTemplateConfig] = None,
-                 instance_num: int = 32,
                  tp: int = 1,
                  **kwargs) -> None:
         if backend == 'turbomind':
@@ -79,13 +77,13 @@ class AsyncEngine:
         else:
             raise ValueError(f'unsupported backend {backend}')
         self.backend = backend
+        self.instance_num = self.backend_config.max_batch_size
         self.tokenizer = self.engine.tokenizer
-        self.instance_num = instance_num
         self.id2step = {}
         self.id2generator = {}
         self.loop = asyncio.get_event_loop()
         self.gens_set = set()
-        for i in range(instance_num):
+        for i in range(self.instance_num):
             self.gens_set.add(self.engine.create_instance())
 
     def _build_turbomind(
@@ -114,6 +112,7 @@ class AsyncEngine:
             chat_template_config = ChatTemplateConfig(self.engine.model_name)
         self.chat_template = chat_template_config.chat_template
         self.session_len = self.engine.session_len
+        self.backend_config = backend_config
 
     def _build_pytorch(
             self,
@@ -157,6 +156,7 @@ class AsyncEngine:
             self.session_len = self.chat_template.session_len
         else:
             self.session_len = self.engine.session_len
+        self.backend_config = backend_config
 
     def __call__(self,
                  prompts: List[str],
@@ -266,7 +266,7 @@ class AsyncEngine:
         assert isinstance(prompts, List), 'prompts should be a list'
         if gen_config is None:
             gen_config = GenerationConfig()
-        if isinstance(gen_config, GenerationConfig):
+        if type(gen_config) is GenerationConfig:
             gen_config = EngineGenerationConfig.From(gen_config,
                                                      self.tokenizer)
         prompt_num = len(prompts)
@@ -331,7 +331,7 @@ class AsyncEngine:
             self.id2step[str(session_id)] = step
         if gen_config is None:
             gen_config = GenerationConfig()
-        if isinstance(gen_config, GenerationConfig):
+        if type(gen_config) is GenerationConfig:
             gen_config = EngineGenerationConfig.From(gen_config,
                                                      self.tokenizer)
         prompt = messages
