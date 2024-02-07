@@ -486,6 +486,7 @@ class TurboMindInstance:
 
         self.model_insts = model_insts
         self.que = Queue()
+        self.aque = asyncio.Queue()
         self.threads = [None] * self.gpu_count
 
     def _create_model_instance(self, device_id, model_insts):
@@ -516,10 +517,10 @@ class TurboMindInstance:
             t.start()
             self.threads[device_id] = t
 
-    def _async_forward_callback(self, result, ctx, que: asyncio.Queue):
-        que.put_nowait((False, result))
+    def _async_forward_callback(self, result, ctx):
+        self.aque.put_nowait((False, result))
 
-    def _async_forward_thread(self, inputs, que: asyncio.Queue):
+    def _async_forward_thread(self, inputs):
         instance_comm = self.tm_model.model_comm.create_instance_comm(
             self.gpu_count)
 
@@ -528,7 +529,7 @@ class TurboMindInstance:
                 output = self.model_insts[device_id].forward(
                     inputs, instance_comm)
                 if enque_output:
-                    que.put_nowait((True, output))
+                    self.aque.put_nowait((True, output))
 
         for device_id in range(self.gpu_count):
             t = Thread(target=_func,
@@ -730,12 +731,9 @@ class TurboMindInstance:
             kwargs (dict): kwargs for backward compatibility
         """
         # start forward thread
-        que = asyncio.Queue()
-        from functools import partial
-        _forward_callback = partial(self._async_forward_callback, que=que)
-        _forward_thread = partial(self._async_forward_thread, que=que)
+        self.aque = asyncio.Queue()
         if stream_output and not stop:
-            self.model_insts[0].register_callback(_forward_callback)
+            self.model_insts[0].register_callback(self._async_forward_callback)
 
         gen_config = self._update_generation_config(gen_config, **kwargs)
         inputs, input_lengths = self.prepare_inputs(
@@ -750,13 +748,14 @@ class TurboMindInstance:
             gen_config=gen_config)
 
         tm_inputs = _np_dict_to_tm_dict(inputs)
-        _forward_thread(tm_inputs)
+        self._async_forward_thread(tm_inputs)
 
         seq_start = input_lengths + input_lengths.new_tensor(step)
 
+        finish = False
         # generator
-        while True:
-            finish, tm_outputs = await que.get()
+        while not finish:
+            finish, tm_outputs = await self.aque.get()
 
             outputs = _tm_dict_to_torch_dict(tm_outputs)
 
@@ -783,13 +782,10 @@ class TurboMindInstance:
                     outputs = (status, output.tolist(), len_)
             yield outputs
 
-            if finish:
-                for t in self.threads:
-                    t.join()
-                while que.qsize() > 0:
-                    que.get_nowait()
-                break
-
+        for t in self.threads:
+            t.join()
+        while self.aque.qsize() > 0:
+            self.aque.get_nowait()
         if stream_output and not stop:
             self.model_insts[0].unregister_callback()
 
