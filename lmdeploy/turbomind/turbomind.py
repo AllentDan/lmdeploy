@@ -487,6 +487,7 @@ class TurboMindInstance:
         self.model_insts = model_insts
         self.que = Queue()
         self.aque = asyncio.Queue()
+        self.afinal = asyncio.Queue()
         self.threads = [None] * self.gpu_count
 
     def _create_model_instance(self, device_id, model_insts):
@@ -529,7 +530,7 @@ class TurboMindInstance:
                 output = self.model_insts[device_id].forward(
                     inputs, instance_comm)
                 if enque_output:
-                    self.aque.put_nowait((True, output))
+                    self.afinal.put_nowait((True, output))
 
         for device_id in range(self.gpu_count):
             t = Thread(target=_func,
@@ -732,6 +733,7 @@ class TurboMindInstance:
         """
         # start forward thread
         self.aque = asyncio.Queue()
+        self.afinal = asyncio.Queue()
         if stream_output and not stop:
             self.model_insts[0].register_callback(self._async_forward_callback)
 
@@ -752,11 +754,7 @@ class TurboMindInstance:
 
         seq_start = input_lengths + input_lengths.new_tensor(step)
 
-        finish = False
-        # generator
-        while not finish:
-            finish, tm_outputs = await self.aque.get()
-
+        def _yield_outputs(finish, tm_outputs):
             outputs = _tm_dict_to_torch_dict(tm_outputs)
 
             output_ids = outputs['output_ids'][:, 0, :]
@@ -780,7 +778,17 @@ class TurboMindInstance:
                     outputs = (status, output[:-1].tolist(), len_)
                 else:
                     outputs = (status, output.tolist(), len_)
-            yield outputs
+            return outputs
+
+        finish = False
+        # generator
+        while not finish:
+            while self.aque.qsize() > 1:
+                self.aque.get_nowait()
+            finish, tm_outputs = await self.aque.get()
+            while self.afinal.qsize() > 0:
+                finish, tm_outputs = await self.afinal.get()
+            yield _yield_outputs(finish, tm_outputs)
 
         for t in self.threads:
             t.join()
