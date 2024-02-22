@@ -65,7 +65,7 @@ class SubCliChat(object):
         ArgumentHelper.session_len(engine_group)
         # other arguments
         ArgumentHelper.cap(parser)
-        ArgumentHelper.meta_instruction(parser)
+        ArgumentHelper.chat_template(parser)
 
     @staticmethod
     def torch(args):
