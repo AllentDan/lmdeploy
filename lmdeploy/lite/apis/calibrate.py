@@ -110,6 +110,17 @@ def _prepare_for_calibrate(model: nn.Module,
             print(f'Move {mod_name} to GPU.')
 
 
+def maybe_deepseekvl_model(model_path: str):
+    """DeepSeek VL model could be different and can not be loaded directly
+    through AutoTokenizer.from_pretrained."""
+    from transformers import PretrainedConfig
+    cfg = PretrainedConfig.get_config_dict(model_path)[0]
+    if cfg['architectures'][
+            0] == 'MultiModalityCausalLM' and 'language_config' in cfg:
+        return True
+    return False
+
+
 def calibrate(model: str,
               calib_dataset: str = 'ptb',
               calib_samples: int = 128,
@@ -142,13 +153,26 @@ def calibrate(model: str,
         'Support only `c4`, `ptb`, `wikitext2` or `pileval`.'
 
     # Load tokenizer and configuration
-    tokenizer = AutoTokenizer.from_pretrained(model,
-                                              use_fast=False,
-                                              trust_remote_code=True)
-
-    model = load_hf_from_pretrained(model,
-                                    torch_dtype=torch.float16,
-                                    trust_remote_code=True)
+    try:
+        tokenizer = AutoTokenizer.from_pretrained(model,
+                                                  use_fast=False,
+                                                  trust_remote_code=True)
+        model = load_hf_from_pretrained(model,
+                                        torch_dtype=torch.float16,
+                                        trust_remote_code=True)
+    except Exception as e:  # noqa
+        if maybe_deepseekvl_model(model):
+            from deepseek_vl.models import VLChatProcessor
+            vl_chat_processor = VLChatProcessor.from_pretrained(model)
+            tokenizer = vl_chat_processor.tokenizer
+            model = load_hf_from_pretrained(model,
+                                            torch_dtype=torch.float16,
+                                            trust_remote_code=True)
+            del model.aligner
+            del model.vision_model
+            model = model.language_model
+        else:
+            raise e
 
     model_type = type(model).__name__
     if model_type not in LAYER_TYPE_MAP or model_type not in NORM_TYPE_MAP:
@@ -168,6 +192,7 @@ def calibrate(model: str,
 
     layer_type = LAYER_TYPE_MAP[type(model).__name__]
     norm_type = NORM_TYPE_MAP[type(model).__name__]
+    print(model_type, layer_type, norm_type)
 
     _prepare_for_calibrate(model, layer_type,
                            HEAD_NAME_MAP[type(model).__name__], device)

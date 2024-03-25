@@ -307,6 +307,8 @@ class CalibrationContext():
         else:
             model = self.model.model
         with torch.inference_mode():
+            model = self.model.model
+            data = data[-1:]
             _ = model(data.to(self.device))
 
     def __enter__(self):
