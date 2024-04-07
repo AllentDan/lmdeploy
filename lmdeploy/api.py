@@ -161,6 +161,7 @@ def serve(model_path: str,
         kwargs.pop('tp')
     else:
         tp = 1 if backend_config is None else backend_config.tp
+    is_daemon = False if backend == 'pytorch' and tp > 1 else True
     task = Process(target=serve,
                    args=(model_path, ),
                    kwargs=dict(model_name=model_name,
@@ -174,7 +175,7 @@ def serve(model_path: str,
                                api_keys=api_keys,
                                ssl=ssl,
                                **kwargs),
-                   daemon=True)
+                   daemon=is_daemon)
     task.start()
     client = APIClient(f'http://{server_name}:{server_port}')
     while True:
