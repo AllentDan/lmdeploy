@@ -15,10 +15,9 @@ from lmdeploy.messages import (EngineGenerationConfig, GenerationConfig,
                                PytorchEngineConfig, Response,
                                TurbomindEngineConfig)
 from lmdeploy.model import MODELS, ChatTemplateConfig, best_match_model
+from lmdeploy.serve.metrics import IterTimer, Metrics, Stats
 from lmdeploy.tokenizer import DetokenizeState
 from lmdeploy.utils import _stop_words, get_logger
-
-from .metrics import StatLogger, Stats
 
 logger = get_logger('lmdeploy')
 
@@ -233,8 +232,8 @@ class AsyncEngine:
         self.log_stats = log_stats
         if self.log_stats:
             self.stats = Stats(now=time.time())
-            self.state_logger = StatLogger(5, dict())
-            self.state_logger.info(self.backend_config)
+            self.metrics = Metrics()
+            self.metrics.info(self.backend_config)
 
     def _build_turbomind(
             self,
@@ -631,7 +630,6 @@ class AsyncEngine:
                 sequence_end=sequence_end,
                 step=self.id2step[str(session_id)])
             if self.log_stats:
-                from lmdeploy.timer import IterTimer
                 iterator = IterTimer(iterator)
             async with self.safe_run(session_id):
                 state = DetokenizeState()
@@ -672,7 +670,7 @@ class AsyncEngine:
                 self.stats.duration_infer += iterator.get_duration()
                 self.stats.request_success += 1
                 self.stats.request_total += 1
-                self.state_logger.log(self.stats)
+                self.metrics.log(self.stats)
 
     def chat(self,
              prompt: str,
