@@ -10,6 +10,7 @@ from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.security.http import HTTPAuthorizationCredentials, HTTPBearer
+from prometheus_client import make_asgi_app
 
 from lmdeploy.archs import get_task
 from lmdeploy.messages import (GenerationConfig, PytorchEngineConfig,
@@ -39,6 +40,9 @@ class VariableInterface:
 
 
 app = FastAPI(docs_url='/')
+# Add prometheus asgi middleware to route /metrics requests
+metrics_app = make_asgi_app()
+app.mount('/metrics', metrics_app)
 get_bearer_token = HTTPBearer(auto_error=False)
 
 

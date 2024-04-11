@@ -3,6 +3,7 @@ import asyncio
 import dataclasses
 import os
 import random
+import time
 from argparse import ArgumentError
 from contextlib import asynccontextmanager
 from itertools import count
@@ -16,6 +17,8 @@ from lmdeploy.messages import (EngineGenerationConfig, GenerationConfig,
 from lmdeploy.model import MODELS, ChatTemplateConfig, best_match_model
 from lmdeploy.tokenizer import DetokenizeState
 from lmdeploy.utils import _stop_words, get_logger
+
+from .metrics import StatLogger, Stats
 
 logger = get_logger('lmdeploy')
 
@@ -172,6 +175,7 @@ class AsyncEngine:
                                                 PytorchEngineConfig]] = None,
                  chat_template_config: Optional[ChatTemplateConfig] = None,
                  tp: int = 1,
+                 log_stats: bool = True,
                  **kwargs) -> None:
         logger.info(
             f'input backend={backend}, backend_config={backend_config}')
@@ -226,6 +230,11 @@ class AsyncEngine:
         self.gens_set = set()
         for i in range(self.instance_num):
             self.gens_set.add(self.engine.create_instance())
+        self.log_stats = log_stats
+        if self.log_stats:
+            self.stats = Stats(now=time.time())
+            self.state_logger = StatLogger(5, dict(test_key='test_value'))
+            self.state_logger.info(self.backend_config)
 
     def _build_turbomind(
             self,
@@ -548,32 +557,36 @@ class AsyncEngine:
             do_preprocess (bool): whether pre-process the messages. Default to
                 True, which means chat_template will be applied.
         """
-        if str(session_id) not in self.id2step:
-            self.id2step[str(session_id)] = 0
-        if step != 0:
-            self.id2step[str(session_id)] = step
-        if gen_config is None:
-            gen_config = GenerationConfig()
-        if type(gen_config) is GenerationConfig:
-            gen_config = EngineGenerationConfig.From(gen_config,
-                                                     self.tokenizer)
-        if gen_config.stop_words is None:
-            gen_config.stop_words = self.stop_words
-        # set random if it is not set and sequence_start is True
-        if gen_config.random_seed is None and sequence_start:
-            gen_config.random_seed = random.getrandbits(64)
-        prompt = messages
 
-        prompt_input = await self._get_prompt_input(prompt, do_preprocess,
-                                                    sequence_start,
-                                                    adapter_name)
+        async def preprocess(gen_config):
+            if str(session_id) not in self.id2step:
+                self.id2step[str(session_id)] = 0
+            if step != 0:
+                self.id2step[str(session_id)] = step
+            if gen_config is None:
+                gen_config = GenerationConfig()
+            if type(gen_config) is GenerationConfig:
+                gen_config = EngineGenerationConfig.From(
+                    gen_config, self.tokenizer)
+            if gen_config.stop_words is None:
+                gen_config.stop_words = self.stop_words
+            # set random if it is not set and sequence_start is True
+            if gen_config.random_seed is None and sequence_start:
+                gen_config.random_seed = random.getrandbits(64)
+            prompt = messages
+
+            prompt_input = await self._get_prompt_input(
+                prompt, do_preprocess, sequence_start, adapter_name)
+            if gen_config.max_new_tokens is None:
+                # for interactive endpoint, will try maximum possible token num
+                gen_config.max_new_tokens = max(
+                    128, self.session_len - self.id2step[str(session_id)] -
+                    len(prompt_input['input_ids']))
+            return prompt_input
+
+        prompt_input = await preprocess(gen_config)
         prompt = prompt_input['prompt']
         input_ids = prompt_input['input_ids']
-        if gen_config.max_new_tokens is None:
-            # for interactive endpoint, will try maximum possible token num
-            gen_config.max_new_tokens = max(
-                128, self.session_len - self.id2step[str(session_id)] -
-                len(input_ids))
         finish_reason = None
         logger.info(f'prompt={prompt!r}, '
                     f'gen_config={gen_config}, '
@@ -633,6 +646,8 @@ class AsyncEngine:
                 # TODO modify pytorch or turbomind api
                 if self.backend == 'pytorch' and sequence_end:
                     await self.end_session(session_id)
+        if self.log_stats:
+            self.state_logger.log(self.stats)
 
     def chat(self,
              prompt: str,
