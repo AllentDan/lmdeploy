@@ -226,7 +226,7 @@ async def chat_completions_v1_qos(request: ChatCompletionRequestQos,
     async for res in result_generator:
         if await raw_request.is_disconnected():
             # Abort the request if the client disconnects.
-            await VariableInterface.async_engine.stop_session(
+            await VariableInterface.async_engine.handle_exception(
                 request.session_id)
             return create_error_response(HTTPStatus.BAD_REQUEST,
                                          'Client disconnected')
@@ -391,7 +391,7 @@ async def chat_completions_v1(request: ChatCompletionRequest,
     async for res in result_generator:
         if await raw_request.is_disconnected():
             # Abort the request if the client disconnects.
-            await VariableInterface.async_engine.stop_session(
+            await VariableInterface.async_engine.handle_exception(
                 request.session_id)
             return create_error_response(HTTPStatus.BAD_REQUEST,
                                          'Client disconnected')
@@ -538,7 +538,7 @@ async def completions_v1_qos(request: CompletionRequestQos,
         async for res in generator:
             if await raw_request.is_disconnected():
                 # Abort the request if the client disconnects.
-                await VariableInterface.async_engine.stop_session(
+                await VariableInterface.async_engine.handle_exception(
                     request.session_id)
                 return create_error_response(HTTPStatus.BAD_REQUEST,
                                              'Client disconnected')
@@ -709,7 +709,7 @@ async def completions_v1(request: CompletionRequest,
         async for res in generator:
             if await raw_request.is_disconnected():
                 # Abort the request if the client disconnects.
-                await VariableInterface.async_engine.stop_session(
+                await VariableInterface.async_engine.handle_exception(
                     request.session_id)
                 return create_error_response(HTTPStatus.BAD_REQUEST,
                                              'Client disconnected')
@@ -847,7 +847,7 @@ async def chat_interactive_v1_qos(request: GenerateRequestQos,
         async for out in generation:
             if await raw_request.is_disconnected():
                 # Abort the request if the client disconnects.
-                await VariableInterface.qos_engine.stop_session(
+                await VariableInterface.qos_engine.handle_exception(
                     request.session_id)
                 return create_error_response(HTTPStatus.BAD_REQUEST,
                                              'Client disconnected')
@@ -895,7 +895,7 @@ async def chat_interactive_v1(request: GenerateRequest,
     """
     if request.cancel:
         if request.session_id != -1:
-            await VariableInterface.async_engine.stop_session(
+            await VariableInterface.async_engine.handle_exception(
                 request.session_id)
             return {
                 'text': '',
@@ -958,7 +958,7 @@ async def chat_interactive_v1(request: GenerateRequest,
         async for out in generation:
             if await raw_request.is_disconnected():
                 # Abort the request if the client disconnects.
-                await async_engine.stop_session(request.session_id)
+                await async_engine.handle_exception(request.session_id)
                 return create_error_response(HTTPStatus.BAD_REQUEST,
                                              'Client disconnected')
             text += out.response
