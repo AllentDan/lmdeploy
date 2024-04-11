@@ -174,7 +174,7 @@ class AsyncEngine:
                                                 PytorchEngineConfig]] = None,
                  chat_template_config: Optional[ChatTemplateConfig] = None,
                  tp: int = 1,
-                 log_stats: bool = True,
+                 log_stats: bool = False,
                  **kwargs) -> None:
         logger.info(
             f'input backend={backend}, backend_config={backend_config}')

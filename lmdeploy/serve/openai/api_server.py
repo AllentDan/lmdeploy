@@ -993,6 +993,7 @@ def serve(model_path: str,
           api_keys: Optional[Union[List[str], str]] = None,
           ssl: bool = False,
           qos_config_path: str = '',
+          log_stats: bool = False,
           **kwargs):
     """An example to perform model inference through the command line
     interface.
@@ -1031,6 +1032,7 @@ def serve(model_path: str,
             a single api_key. Default to None, which means no api key applied.
         ssl (bool): Enable SSL. Requires OS Environment variables 'SSL_KEYFILE' and 'SSL_CERTFILE'.
         qos_config_path (str): qos policy config path
+        log_stats (bool): Whether log stats to prometheus.
     """ # noqa E501
     if os.getenv('TM_LOG_LEVEL') is None:
         os.environ['TM_LOG_LEVEL'] = log_level
@@ -1064,6 +1066,7 @@ def serve(model_path: str,
         backend_config=backend_config,
         chat_template_config=chat_template_config,
         tp=tp,
+        log_stats=log_stats,
         **kwargs)
 
     if qos_config_path:
