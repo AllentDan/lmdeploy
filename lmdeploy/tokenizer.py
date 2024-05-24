@@ -475,7 +475,7 @@ class HuggingFaceTokenizer:
         Returns:
             list[int]: token ids
         """
-        add_special_tokens = False
+        add_special_tokens = True
         return self.model(s, add_special_tokens=add_special_tokens)
 
 
