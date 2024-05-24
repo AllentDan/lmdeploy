@@ -172,7 +172,11 @@ class SentencePieceTokenizer:
         state.prev_tokens = []  # not None for the above condition
         return out_string, state
 
-    def __call__(self, s: Union[str, Sequence[str]]):
+    def __call__(self,
+                 s: Union[str, Sequence[str]],
+                 add_bos: bool = False,
+                 add_eos: bool = False,
+                 **kwargs):
         """Tokenize prompts.
 
         Args:
@@ -181,10 +185,11 @@ class SentencePieceTokenizer:
             list[int]: token ids
         """
         import addict
-        add_bos = False
-        add_eos = False
 
-        input_ids = self.model.Encode(s, add_bos=add_bos, add_eos=add_eos)
+        input_ids = self.model.Encode(s,
+                                      add_bos=add_bos,
+                                      add_eos=add_eos,
+                                      **kwargs)
         return addict.Addict(input_ids=input_ids)
 
 
@@ -467,7 +472,7 @@ class HuggingFaceTokenizer:
         return new_text, DetokenizeState(len(all_input_ids), prev_tokens,
                                          prefix_offset, read_offset)
 
-    def __call__(self, s: Union[str, Sequence[str]]):
+    def __call__(self, s: Union[str, Sequence[str]], *args, **kwargs):
         """Tokenize prompts.
 
         Args:
@@ -475,8 +480,7 @@ class HuggingFaceTokenizer:
         Returns:
             list[int]: token ids
         """
-        add_special_tokens = True
-        return self.model(s, add_special_tokens=add_special_tokens)
+        return self.model(s, *args, **kwargs)
 
 
 class Tokenizer:
@@ -572,7 +576,7 @@ class Tokenizer:
             skip_special_tokens=skip_special_tokens,
             spaces_between_special_tokens=spaces_between_special_tokens)
 
-    def __call__(self, s: Union[str, Sequence[str]]):
+    def __call__(self, s: Union[str, Sequence[str]], *args, **kwargs):
         """Tokenize prompts.
 
         Args:
@@ -580,7 +584,7 @@ class Tokenizer:
         Returns:
             list[int]: token ids
         """
-        return self.model(s)
+        return self.model(s, *args, **kwargs)
 
     def indexes_containing_token(self, token):
         """Return all the possible indexes, whose decoding output may contain
