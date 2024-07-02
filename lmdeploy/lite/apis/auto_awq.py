@@ -147,10 +147,11 @@ def auto_awq(model: str,
     if vl_model:
         save_vl_model(vl_model, model_path, work_dir)
     else:
-        model.save_pretrained(work_dir,
+        model.push_to_hub('internlm/internlm2_5-7b-chat-4bit',
                               max_shard_size='2GB',
+                              token='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',
                               safe_serialization=False)
-    tokenizer.save_pretrained(work_dir)
+    tokenizer.push_to_hub('internlm/internlm2_5-7b-chat-4bit',token='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')
 
 
 if __name__ == '__main__':
