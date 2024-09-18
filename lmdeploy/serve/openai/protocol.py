@@ -10,9 +10,11 @@ from pydantic import BaseModel, Field
 
 class ErrorResponse(BaseModel):
     """Error responses."""
-    object: str = 'error'
     message: str
+    type: str
     code: int
+    param: Optional[str] = None
+    object: str = 'error'
 
 
 class ModelPermission(BaseModel):
@@ -80,6 +82,30 @@ class ToolChoice(BaseModel):
                                       examples=['function'])
 
 
+class StreamOptions(BaseModel):
+    """The stream options."""
+    include_usage: Optional[bool] = False
+
+
+class JsonSchema(BaseModel):
+    name: str
+    # description is not used since it depends on model
+    description: Optional[str] = None
+    # use alias since pydantic does not support the OpenAI key `schema`
+    json_schema: Optional[Dict[str, Any]] = Field(default=None,
+                                                  alias='schema',
+                                                  examples=[None])
+    # strict is not used
+    strict: Optional[bool] = False
+
+
+class ResponseFormat(BaseModel):
+    # regex_schema is extended by lmdeploy to support regex output
+    type: Literal['text', 'json_object', 'json_schema', 'regex_schema']
+    json_schema: Optional[JsonSchema] = None
+    regex_schema: Optional[str] = None
+
+
 class ChatCompletionRequest(BaseModel):
     """Chat completion request."""
     model: str
@@ -92,19 +118,25 @@ class ChatCompletionRequest(BaseModel):
     logprobs: Optional[bool] = False
     top_logprobs: Optional[int] = None
     n: Optional[int] = 1
+    logit_bias: Optional[Dict[str, float]] = Field(default=None, examples=[None])  # noqa
     max_tokens: Optional[int] = Field(default=None, examples=[None])
     stop: Optional[Union[str, List[str]]] = Field(default=None, examples=[None])  # noqa
     # yapf: enable
     stream: Optional[bool] = False
+    stream_options: Optional[StreamOptions] = Field(default=None,
+                                                    examples=[None])
     presence_penalty: Optional[float] = 0.0
     frequency_penalty: Optional[float] = 0.0
     user: Optional[str] = None
+    response_format: Optional[ResponseFormat] = Field(default=None,
+                                                      examples=[None])  # noqa
     # additional argument of lmdeploy
     repetition_penalty: Optional[float] = 1.0
     session_id: Optional[int] = -1
     ignore_eos: Optional[bool] = False
     skip_special_tokens: Optional[bool] = True
     top_k: Optional[int] = 40
+    seed: Optional[int] = None
 
 
 class FunctionResponse(BaseModel):
@@ -205,6 +237,8 @@ class CompletionRequest(BaseModel):
     stop: Optional[Union[str, List[str]]] = Field(default=None,
                                                   examples=[None])
     stream: Optional[bool] = False
+    stream_options: Optional[StreamOptions] = Field(default=None,
+                                                    examples=[None])
     top_p: Optional[float] = 1.0
     logprobs: Optional[int] = None
     echo: Optional[bool] = False
@@ -217,6 +251,7 @@ class CompletionRequest(BaseModel):
     ignore_eos: Optional[bool] = False
     skip_special_tokens: Optional[bool] = True
     top_k: Optional[int] = 40  # for opencompass
+    seed: Optional[int] = None
 
 
 class CompletionResponseChoice(BaseModel):
@@ -252,6 +287,7 @@ class CompletionStreamResponse(BaseModel):
     created: int = Field(default_factory=lambda: int(time.time()))
     model: str
     choices: List[CompletionResponseStreamChoice]
+    usage: Optional[UsageInfo] = None
 
 
 class EmbeddingsRequest(BaseModel):
@@ -302,6 +338,7 @@ class GenerateRequest(BaseModel):
     skip_special_tokens: Optional[bool] = True
     cancel: Optional[bool] = False  # cancel a responding request
     adapter_name: Optional[str] = Field(default=None, examples=[None])
+    seed: Optional[int] = None
 
 
 class GenerateResponse(BaseModel):

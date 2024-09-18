@@ -64,7 +64,7 @@ def smooth_quant(model: str,
         act_scales = torch.load(work_dir / 'vision_inputs_stats.pth')['absmax']
         _smooth_quant(vl_model.vision_model, act_scales, device)
         vl_model.vision_model.config.update(
-            dict(lmdeploy_quant_config=dict(quant_method='smooth_quant',
+            dict(quantization_config=dict(quant_method='smooth_quant',
                                             bits=w_bits)))
 
     if vl_model:
@@ -72,7 +72,7 @@ def smooth_quant(model: str,
         save_vl_model(vl_model, model_path, work_dir)
     else:
         model.config.update(
-            dict(lmdeploy_quant_config=dict(quant_method='smooth_quant',
+            dict(quantization_config=dict(quant_method='smooth_quant',
                                             bits=w_bits)))
         model.save_pretrained(work_dir,
                               max_shard_size='2GB',

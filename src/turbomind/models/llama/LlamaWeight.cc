@@ -19,6 +19,8 @@
 // https://github.com/NVIDIA/FasterTransformer/blob/main/src/fastertransformer/models/multi_gpu_gpt/ParallelGptWeight.cc
 
 #include "src/turbomind/models/llama/LlamaWeight.h"
+#include "src/turbomind/utils/memory_utils.h"
+#include <cuda_runtime.h>
 
 namespace turbomind {
 
@@ -26,16 +28,17 @@ template<typename T>
 LlamaWeight<T>::LlamaWeight(size_t     head_num,
                             size_t     kv_head_num,
                             size_t     size_per_head,
+                            size_t     hidden_units,
                             size_t     inter_size,
                             size_t     vocab_size,
                             size_t     num_layer,
                             bool       attn_bias,
                             WeightType weight_type,
                             int        group_size,
-                            LoraParams lora_params,
+                            LoraParam  lora_param,
                             size_t     tensor_para_size,
                             size_t     tensor_para_rank):
-    hidden_units_(head_num * size_per_head),
+    hidden_units_(hidden_units),
     inter_size_(inter_size),
     vocab_size_(vocab_size),
     vocab_size_padded_(vocab_size),
@@ -48,16 +51,20 @@ LlamaWeight<T>::LlamaWeight(size_t     head_num,
         vocab_size_padded_ = (vocab_size_padded_ + tensor_para_size_ - 1) / tensor_para_size_ * tensor_para_size_;
         TM_LOG_WARNING("pad vocab size from %d to %d", vocab_size_, vocab_size_padded_);
     }
+
+    FT_CHECK(hidden_units_ % tensor_para_size_ == 0);
+
     decoder_layer_weights.reserve(num_layer_);
     for (unsigned l = 0; l < num_layer_; ++l) {
         decoder_layer_weights.push_back(new LlamaDecoderLayerWeight<T>(l,
                                                                        head_num,
                                                                        kv_head_num,
                                                                        size_per_head,
+                                                                       hidden_units_,
                                                                        inter_size_,
                                                                        weight_type_,
                                                                        group_size,
-                                                                       lora_params,
+                                                                       lora_param,
                                                                        attn_bias,
                                                                        tensor_para_size_,
                                                                        tensor_para_rank_));
@@ -74,6 +81,7 @@ LlamaWeight<T>::~LlamaWeight()
     cudaFree((void*)post_decoder_embedding_kernel);
 
     pre_decoder_embedding_table   = nullptr;
+    output_norm_weight            = nullptr;
     post_decoder_embedding_kernel = nullptr;
 
     for (auto& p : decoder_layer_weights) {
@@ -84,9 +92,10 @@ LlamaWeight<T>::~LlamaWeight()
 template<typename T>
 void LlamaWeight<T>::mallocWeights()
 {
-    deviceMalloc((T**)&pre_decoder_embedding_table, vocab_size_padded_ * hidden_units_);
+    FT_CHECK(vocab_size_padded_ % tensor_para_size_ == 0);
+    deviceMalloc((T**)&pre_decoder_embedding_table, vocab_size_padded_ * hidden_units_ / tensor_para_size_);
     deviceMalloc((T**)&output_norm_weight, hidden_units_);
-    deviceMalloc((T**)&post_decoder_embedding_kernel, hidden_units_ * vocab_size_padded_);
+    deviceMalloc((T**)&post_decoder_embedding_kernel, hidden_units_ * vocab_size_padded_ / tensor_para_size_);
 }
 
 template<typename T>
@@ -99,15 +108,15 @@ void LlamaWeight<T>::loadModel(std::string dir_path)
     dir_path += '/';
 
     loadWeightFromBin((T*)pre_decoder_embedding_table,
-                      {vocab_size_padded_ * hidden_units_},
-                      dir_path + "tok_embeddings.weight",
+                      {vocab_size_padded_ * hidden_units_ / tensor_para_size_},
+                      dir_path + "tok_embeddings." + std::to_string(tensor_para_rank_) + ".weight",
                       model_file_type);
 
     loadWeightFromBin((T*)output_norm_weight, {hidden_units_}, dir_path + "norm.weight", model_file_type);
 
     loadWeightFromBin((T*)post_decoder_embedding_kernel,
-                      {hidden_units_ * vocab_size_padded_},
-                      dir_path + "output.weight",
+                      {hidden_units_ * vocab_size_padded_ / tensor_para_size_},
+                      dir_path + "output." + std::to_string(tensor_para_rank_) + ".weight",
                       model_file_type);
 
     for (unsigned layer = 0; layer < num_layer_; ++layer) {
@@ -120,19 +129,19 @@ TensorMap LlamaWeight<T>::getParams()
 {
     TensorMap output;
 
-    output.insert("tok_embeddings.weight",
+    output.insert("tok_embeddings." + std::to_string(tensor_para_rank_) + ".weight",
                   Tensor{MEMORY_GPU,
                          getTensorType<T>(),
-                         {vocab_size_padded_ * hidden_units_ * sizeof(T)},
+                         {vocab_size_padded_ * hidden_units_ / tensor_para_size_ * sizeof(T)},
                          pre_decoder_embedding_table});
 
     output.insert("norm.weight",
                   Tensor{MEMORY_GPU, getTensorType<T>(), {hidden_units_ * sizeof(T)}, output_norm_weight});
 
-    output.insert("output.weight",
+    output.insert("output." + std::to_string(tensor_para_rank_) + ".weight",
                   Tensor{MEMORY_GPU,
                          getTensorType<T>(),
-                         {hidden_units_ * vocab_size_padded_ * sizeof(T)},
+                         {hidden_units_ * vocab_size_padded_ * sizeof(T) / tensor_para_size_},
                          post_decoder_embedding_kernel});
 
     // transformer layers
@@ -145,6 +154,23 @@ TensorMap LlamaWeight<T>::getParams()
     }
 
     return output;
+}
+
+template<typename T>
+void LlamaWeight<T>::prepare(const cudaDeviceProp& prop)
+{
+    const auto workspace_size = decoder_layer_weights[0]->workspace_size();
+    char*      workspace{};
+
+    TM_LOG_INFO("[LlamaWeight<T>::prepare] workspace size: %d\n", workspace_size);
+
+    if (workspace_size) {
+        deviceMalloc((char**)&workspace, workspace_size);
+    }
+    for (auto& layer : decoder_layer_weights) {
+        layer->prepare(workspace, workspace_size, prop);
+    }
+    deviceFree(workspace);
 }
 
 #ifdef ENABLE_FP32

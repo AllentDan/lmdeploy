@@ -22,6 +22,24 @@ def _handle_exception(e: Exception,
     exit(1)
 
 
+def check_env_deeplink(device_type: str):
+    """check Deeplink environment."""
+    try_import_deeplink(device_type)
+
+
+def try_import_deeplink(device_type: str):
+    """import dlinfer if specific device_type is set."""
+    deeplink_device_type_list = [
+        'ascend',
+    ]
+    if device_type in deeplink_device_type_list:
+        logger = get_logger('lmdeploy')
+        try:
+            import dlinfer.framework.lmdeploy_ext  # noqa: F401
+        except Exception as e:
+            _handle_exception(e, 'PyTorch', logger)
+
+
 def check_env_torch():
     """check PyTorch environment."""
     logger = get_logger('lmdeploy')
@@ -52,8 +70,8 @@ def check_env_triton():
         import triton
         if version.parse(
                 triton.__version__) > version.parse(MAX_TRITON_VERSION):
-            logger.warning(f'Install triton<={MAX_TRITON_VERSION}'
-                           ' if you want to get better performance.')
+            logger.warning(
+                f'Engine has not been tested on triton>{MAX_TRITON_VERSION}.')
 
         from .triton_custom_add import custom_add
         a = torch.tensor([1, 2], device='cuda')
@@ -78,13 +96,14 @@ def check_env(device_type: str):
     """check all environment."""
     logger = get_logger('lmdeploy')
     logger.info('Checking environment for PyTorch Engine.')
+    check_env_deeplink(device_type)
     check_env_torch()
     if device_type == 'cuda':
         check_env_triton()
 
 
 MIN_TRANSFORMERS_VERSION = '4.33.0'
-MAX_TRANSFORMERS_VERSION = '4.41.2'
+MAX_TRANSFORMERS_VERSION = '4.44.1'
 
 
 def check_awq(hf_config):

@@ -9,7 +9,7 @@ from lmdeploy.archs import get_model_arch
 from lmdeploy.model import BaseModel
 from lmdeploy.utils import get_logger
 from lmdeploy.vl.constants import IMAGE_TOKEN
-from lmdeploy.vl.utils import encode_image_base64, load_image
+from lmdeploy.vl.utils import load_image
 
 logger = get_logger('lmdeploy')
 
@@ -43,15 +43,11 @@ class VLChatTemplateWrapper:
                 # 'image_url': means url or local path to image.
                 # 'image_data': means PIL.Image.Image object.
                 if isinstance(image, str):
-                    image_base64_data = encode_image_base64(image)
-                    if image_base64_data == '':
-                        logger.error(f'failed to load file {image}')
-                        continue
+                    image = load_image(image)
                     item = {
-                        'type': 'image_url',
-                        'image_url': {
-                            'url':
-                            f'data:image/jpeg;base64,{image_base64_data}'
+                        'type': 'image_data',
+                        'image_data': {
+                            'data': image
                         }
                     }
                 elif isinstance(image, PIL.Image.Image):
@@ -110,6 +106,8 @@ class VLChatTemplateWrapper:
 
     def append_image_token(self, prompt, num_images: int):
         """append image token to user prompt."""
+        if IMAGE_TOKEN in prompt:
+            return prompt
         return (IMAGE_TOKEN + '\n') * num_images + prompt
 
     def convert_messages(self, messages, sequence_start=True):
@@ -134,9 +132,8 @@ class VLChatTemplateWrapper:
                     num_images += 1
                 elif item['type'] == 'text':
                     prompt = item['text']
-            # if IMAGE_TOKEN in user prompt, use user custom prompt instead
-            # of adding IMAGE_TOKEN to user prompt
-            if IMAGE_TOKEN not in prompt and num_images > 0:
+            if num_images > 0:
+                # add IMAGE_TOKEN to user prompt
                 prompt = self.append_image_token(prompt, num_images)
             new_item = {'role': 'user', 'content': prompt}
             new_messages.append(new_item)
@@ -165,8 +162,17 @@ class InternVLChatTemplateWrapper(VLChatTemplateWrapper):
 
     def append_image_token(self, prompt, num_images: int):
         """append image tokens to user prompt."""
-        # not sure whether support multi images.
-        return f'<img>{IMAGE_TOKEN * num_images}</img>\n' + prompt
+        # lmdeploy uses <IMAGET_TOKEN> as image token
+        # internvl uses special tags
+        if IMAGE_TOKEN in prompt and f'<img>{IMAGE_TOKEN}' not in prompt:
+            prompt = prompt.replace(f'{IMAGE_TOKEN}',
+                                    f'<img>{IMAGE_TOKEN}</img>')
+            prompt = prompt.replace('</img><img>', '')
+            prompt = prompt.replace('<img><img>', '<img>')
+            prompt = prompt.replace('</img></img>', '</img>')
+        elif IMAGE_TOKEN not in prompt:
+            prompt = f'<img>{IMAGE_TOKEN * num_images}</img>\n' + prompt
+        return prompt
 
 
 class DeepSeekVLChatTemplateWrapper(VLChatTemplateWrapper):
@@ -174,6 +180,8 @@ class DeepSeekVLChatTemplateWrapper(VLChatTemplateWrapper):
 
     def append_image_token(self, prompt, num_images: int):
         """append image tokens to user prompt."""
+        if IMAGE_TOKEN in prompt:
+            return prompt
         logger.error(
             f'for deepseek-vl model, the user should insert the {IMAGE_TOKEN} '
             'to user prompt manually, please read https://lmdeploy.readthedocs'
@@ -192,6 +200,8 @@ class QwenVLChatTemplateWrapper(VLChatTemplateWrapper):
 
     def append_image_token(self, prompt, num_images: int):
         """append image tokens to user prompt."""
+        if IMAGE_TOKEN in prompt:
+            return prompt
         res = ''
         for i in range(num_images):
             res += f'Picture {str(i)}:{IMAGE_TOKEN}\n'
@@ -260,6 +270,8 @@ class InternLMXComposer2TemplateWrapper(VLChatTemplateWrapper):
     """InternLM-XComposer2 chat template."""
 
     def append_image_token(self, prompt, num_images: int):
+        if IMAGE_TOKEN in prompt:
+            return prompt
         logger.warning(f'auto append {IMAGE_TOKEN} at the beginning, '
                        'the user can manually insert the token to prompt')
         return ' '.join([IMAGE_TOKEN] * num_images) + prompt
@@ -272,6 +284,8 @@ class MiniGeminiLlamaTempateWrapper(VLChatTemplateWrapper):
         """append image tokens to user prompt."""
         if num_images == 0:
             return prompt
+        if IMAGE_TOKEN in prompt:
+            return prompt
         res = f'{IMAGE_TOKEN}\n'
         assert num_images <= 1, 'MiniGeminiLlama accepts 1 input image'
         res = res + prompt
@@ -279,15 +293,18 @@ class MiniGeminiLlamaTempateWrapper(VLChatTemplateWrapper):
 
 
 class MiniCPMVTempateWrapper(VLChatTemplateWrapper):
-    """MiniCPMV chat template."""
+    """MiniCPM-Llama3-V-2_5 chat template."""
 
     def append_image_token(self, prompt, num_images: int):
-        return f'<image>{IMAGE_TOKEN}</image>\n' * num_images + prompt
+        if IMAGE_TOKEN in prompt:
+            return prompt
+        prompt = f'{IMAGE_TOKEN}\n' * num_images + prompt
+        return prompt
 
     def update_image_token(self, prompt, features):
         _features = []
         _prompt = []
-        segs = prompt.split(f'<image>{IMAGE_TOKEN}</image>\n')
+        segs = prompt.split(f'{IMAGE_TOKEN}\n')
         for i, seg in enumerate(segs):
             if i > 0 and i <= len(features):
                 _feat = features[i - 1]['embeddings'].split(1)
@@ -307,6 +324,37 @@ class MiniCPMVTempateWrapper(VLChatTemplateWrapper):
         return _prompt, _features
 
 
+class MiniCPMV26TempateWrapper(MiniCPMVTempateWrapper):
+    """MiniCPM-V-2_6 chat template."""
+
+    def update_image_token(self, prompt, features):
+        _features = []
+        _prompt = []
+        segs = prompt.split(f'{IMAGE_TOKEN}\n')
+        idx = 0
+        for i, seg in enumerate(segs):
+            if i > 0 and i <= len(features):
+                _feat = features[i - 1]['embeddings'].split(1)
+                _feat = [x.squeeze() for x in _feat]
+                _features.extend(_feat)
+                _seg = f'<image>{IMAGE_TOKEN}</image>'
+                if features[i - 1].get('use_image_id', False):
+                    _seg = f'<image_id>{idx}</image_id>' + _seg
+                    idx += 1
+                if len(_feat) > 1:
+                    grid = features[i - 1]['grid']
+                    if grid is not None:
+                        _slice = '\n'.join(
+                            [f'<slice>{IMAGE_TOKEN}</slice>' * grid[0]] *
+                            grid[1])
+                        _seg = _seg + _slice
+                _seg += '\n'
+                _prompt.append(_seg)
+            _prompt.append(seg)
+        _prompt = ''.join(_prompt)
+        return _prompt, _features
+
+
 class GLM4VChatTemplateWrapper(VLChatTemplateWrapper):
     """glm-4v chat template."""
     pass
@@ -316,11 +364,10 @@ def get_vl_prompt_template(model_path: str, chat_template: BaseModel,
                            model_name: str) -> VLChatTemplateWrapper:
     """get vision language prompt template."""
     assert type(chat_template) != type(BaseModel()), 'failed to match ' \
-        'chat template, please explicit set chat_template_config' # noqa E721
+        'chat template, please explicit set chat_template_config'  # noqa E721
     if model_name == 'yi-vl':
         return YiVLChatTemplateWrapper(chat_template)
-
-    arch, _ = get_model_arch(model_path)
+    arch, cfg = get_model_arch(model_path)
     if arch == 'QWenLMHeadModel':
         return QwenVLChatTemplateWrapper(chat_template)
     elif arch in [
@@ -340,7 +387,12 @@ def get_vl_prompt_template(model_path: str, chat_template: BaseModel,
     elif arch in ['MiniGeminiLlamaForCausalLM', 'MGMLlamaForCausalLM']:
         return MiniGeminiLlamaTempateWrapper(chat_template)
     elif arch == 'MiniCPMV':
-        return MiniCPMVTempateWrapper(chat_template)
+        version_map = {
+            '2.5': MiniCPMVTempateWrapper,
+            '2.6': MiniCPMV26TempateWrapper
+        }
+        version = str(getattr(cfg, 'version', '2.5'))
+        return version_map[version](chat_template)
     elif arch == 'ChatGLMModel':
         return GLM4VChatTemplateWrapper(chat_template)
     raise ValueError(f'unsupported vl_prompt_template with arch {arch}')
