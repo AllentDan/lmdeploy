@@ -15,7 +15,6 @@ from ..adapter.adapter import AdapterWeightMap
 from ..backends import get_backend
 from ..config import BackendConfig, CacheConfig, ModelConfig
 from ..devices import DeviceContext, get_device_manager
-from ..models.q_modules import convert_to_qmodules
 from ..model_inputs import ModelInputs
 from ..models.patch import (add_adapters, build_patched_model,
                             update_custom_module_map)
@@ -270,10 +269,6 @@ class BaseModelAgent(AutoModelAgent):
             update_custom_module_map(custom_module_map)
         logger.info('build model.')
         patched_model = build_patched_model(self.model_config, device=device)
-        # w8a8
-        if getattr(self.model_config, 'quantization_config',
-                   {}).get('quant_method', None) == 'smooth_quant':
-            convert_to_qmodules(patched_model)
         logger.info('loading weights.')
         load_model_weights(patched_model, model_path, device=device)
         return patched_model

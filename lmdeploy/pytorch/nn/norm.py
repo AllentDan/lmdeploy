@@ -13,7 +13,7 @@ def _is_w8a8(quant_config: Any):
         return False
     else:
         quant_method = quant_config['quant_method']
-        if quant_method == 'w8a8':
+        if quant_method == 'smooth_quant':
             return True
         else:
             return False

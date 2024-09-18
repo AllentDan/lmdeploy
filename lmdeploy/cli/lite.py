@@ -119,7 +119,6 @@ class SubCliLite(object):
         ArgumentHelper.calib_seqlen(parser)
         ArgumentHelper.calib_batchsize(parser)
         ArgumentHelper.device(parser)
-        ArgumentHelper.calib_search_scale(parser)
 
     @staticmethod
     def auto_awq(args):

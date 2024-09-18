@@ -223,7 +223,6 @@ class QWenModel(nn.Module):
                  dtype: torch.dtype = None,
                  device: torch.device = None):
         super().__init__()
-        quantization_config = getattr(config, 'quantization_config', None)
         self.vocab_size = config.vocab_size
         self.embed_dim = config.hidden_size
         self.wte = nn.Embedding(self.vocab_size,
@@ -257,7 +256,6 @@ class QWenModel(nn.Module):
 
         self.ln_f = RMSNorm(self.embed_dim,
                             eps=config.layer_norm_epsilon,
-                            quant_config=quantization_config,
                             dtype=dtype,
                             device=device)
 

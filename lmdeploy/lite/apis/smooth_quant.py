@@ -65,7 +65,7 @@ def smooth_quant(model: str,
         _smooth_quant(vl_model.vision_model, act_scales, device)
         vl_model.vision_model.config.update(
             dict(quantization_config=dict(quant_method='smooth_quant',
-                                            bits=w_bits)))
+                                          bits=w_bits)))
 
     if vl_model:
         from .auto_awq import save_vl_model
@@ -73,7 +73,7 @@ def smooth_quant(model: str,
     else:
         model.config.update(
             dict(quantization_config=dict(quant_method='smooth_quant',
-                                            bits=w_bits)))
+                                          bits=w_bits)))
         model.save_pretrained(work_dir,
                               max_shard_size='2GB',
                               safe_serialization=False)

@@ -332,7 +332,6 @@ class GLMTransformer(nn.Module):
                  dtype: torch.dtype = None,
                  device: torch.device = None):
         super().__init__()
-        quantization_config = getattr(config, 'quantization_config', None)
         self.num_layers = config.num_layers
         self.post_layer_norm = config.post_layer_norm
 
@@ -347,7 +346,6 @@ class GLMTransformer(nn.Module):
             assert config.rmsnorm
             self.final_layernorm = RMSNorm(config.hidden_size,
                                            config.layernorm_epsilon,
-                                           quant_config=quantization_config,
                                            dtype=dtype,
                                            device=device)
 
