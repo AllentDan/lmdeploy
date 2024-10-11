@@ -19,6 +19,10 @@ NORM_FCS_MAP = {
         'attention_norm': ['attention.wqkv'],
         'ffn_norm': ['feed_forward.w1', 'feed_forward.w3']
     },
+    'InternLM3DecoderLayer': {
+        'attention_norm': ['attention.wqkv', 'attention.wq'],
+        'ffn_norm': ['feed_forward.w1', 'feed_forward.w3']
+    },
     'QWenBlock': {
         'ln_1': ['attn.c_attn'],
         'ln_2': ['mlp.w1', 'mlp.w2']
@@ -52,6 +56,9 @@ FC_FCS_MAP = {
         'mlp.up_proj': ['mlp.down_proj']
     },
     'InternLM2DecoderLayer': {
+        'feed_forward.w3': ['feed_forward.w2']
+    },
+    'InternLM3DecoderLayer': {
         'feed_forward.w3': ['feed_forward.w2']
     },
     'QWenBlock': {
@@ -269,18 +276,29 @@ def smooth_layers(layers,
 
     for l_name, layer in layers.items():
         layer.to(device)
+        submodule_names = [name for name, _ in layer.named_modules()]
         for ln_name, fc_names in norm2fcs.items():
-            a_name = [f'{l_name}.{n}' for n in fc_names][0]
+            a_name = [
+                f'{l_name}.{n}' for n in fc_names if n in submodule_names
+            ][0]
 
             ln = layer.get_submodule(ln_name)
-            fcs = [layer.get_submodule(n) for n in fc_names]
+            fcs = [
+                layer.get_submodule(n) for n in fc_names
+                if n in submodule_names
+            ]
             smooth_ln_fcs(ln, fcs, a_scales[a_name], group_size)
 
         for f_name, fc_names in fc2fcs.items():
-            a_name = [f'{l_name}.{n}' for n in fc_names][0]
+            a_name = [
+                f'{l_name}.{n}' for n in fc_names if n in submodule_names
+            ][0]
 
             fc = layer.get_submodule(f_name)
-            fcs = [layer.get_submodule(n) for n in fc_names]
+            fcs = [
+                layer.get_submodule(n) for n in fc_names
+                if n in submodule_names
+            ]
 
             smooth_fc_fcs(fc, fcs, a_scales[a_name], group_size)
 
