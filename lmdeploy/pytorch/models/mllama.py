@@ -612,8 +612,8 @@ class MllamaForConditionalGeneration(nn.Module, CudaGraphMixin):
                             attn_metadata: Any, input_ids: torch.LongTensor):
         # since every state share the same shape
         cross_attention_states = torch.cat(cross_attention_states, 0)
-        full_text_row_masked_out_mask = torch.ones(
-            (attn_metadata.q_seqlens.sum(), 1), dtype=torch.bool)
+        full_text_row_masked_out_mask = torch.ones((input_ids.shape[-1], 1),
+                                                   dtype=torch.bool)
         start_pos = 0
         img_idx = torch.where(input_ids == MLLAMA_IMAGE_TOKEN_ID)[1]
         for img_id, q_seq_len in zip(img_idx.cpu(),
@@ -634,26 +634,10 @@ class MllamaForConditionalGeneration(nn.Module, CudaGraphMixin):
         attn_metadata: Any = None,
         inputs_embeds: torch.Tensor = None,
         cross_attn_metadata: Any = None,
+        full_text_row_masked_out_mask: torch.Tensor = None,
         **kwargs,
     ):
         """model forward, return logits."""
-        if cross_attn_metadata is None:
-            full_text_row_masked_out_mask = None
-        # FIXME basically, we want to inference
-        # text requests and image requests separately
-        elif cross_attention_states is None and (
-                cross_attn_metadata.kv_seqlens is None
-                or int(cross_attn_metadata.kv_seqlens.sum()) == 0):
-            full_text_row_masked_out_mask = None
-        elif cross_attn_metadata.is_decoding:
-            cross_attention_states = None
-            full_text_row_masked_out_mask = torch.ones(
-                (attn_metadata.q_seqlens.sum(), 1),
-                dtype=torch.bool,
-                device=input_ids.device)
-        else:
-            cross_attention_states, full_text_row_masked_out_mask = \
-                self.flat_encoder_result(cross_attention_states, cross_attn_metadata, input_ids)  # noqa
         hidden_states = self.language_model(
             input_ids=input_ids,
             position_ids=position_ids,
@@ -673,11 +657,11 @@ class MllamaForConditionalGeneration(nn.Module, CudaGraphMixin):
     def support_cuda_graph(
         self,
         input_ids: torch.Tensor,
+        cross_attn_metadata: Any = None,
         **kwargs,
     ):
         """support cudagraph."""
-
-        return False
+        return True
 
     def get_input_embeddings(self):
         """get input embeddings."""
@@ -712,6 +696,24 @@ class MllamaForConditionalGeneration(nn.Module, CudaGraphMixin):
                           vision_embedding_indexing, :] = vision_embeddings.to(
                               inputs_embeds)
 
+        if cross_attn_metadata is None:
+            full_text_row_masked_out_mask = None
+        # FIXME basically, we want to inference
+        # text requests and image requests separately
+        elif cross_attention_states is None and (
+                cross_attn_metadata.kv_seqlens is None
+                or int(cross_attn_metadata.kv_seqlens.sum()) == 0):
+            full_text_row_masked_out_mask = None
+        elif cross_attn_metadata.is_decoding:
+            cross_attention_states = None
+            full_text_row_masked_out_mask = torch.ones(
+                (attn_metadata.q_seqlens.sum(), 1),
+                dtype=torch.bool,
+                device=input_ids.device)
+        else:
+            cross_attention_states, full_text_row_masked_out_mask = \
+                self.flat_encoder_result(cross_attention_states, cross_attn_metadata, input_ids)  # noqa
+
         # inputs of forward
         return dict(
             input_ids=input_ids,
@@ -721,6 +723,7 @@ class MllamaForConditionalGeneration(nn.Module, CudaGraphMixin):
             inputs_embeds=inputs_embeds,
             cross_attention_states=cross_attention_states,
             cross_attn_metadata=cross_attn_metadata,
+            full_text_row_masked_out_mask=full_text_row_masked_out_mask,
         )
 
     def load_weights(self, weights: Iterable[Tuple[str, torch.Tensor]]):

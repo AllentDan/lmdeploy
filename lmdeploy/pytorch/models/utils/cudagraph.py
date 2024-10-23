@@ -87,6 +87,11 @@ class CudaGraphMixin:
         input_buffers['fill_seqlens'] = torch.zeros(max_batches,
                                                     dtype=torch.int64,
                                                     device=device)
+        input_buffers['cross_kv_seqlens'] = torch.zeros(max_batches,
+                                                        dtype=torch.int64,
+                                                        device=device)
+        input_buffers['full_text_row_masked_out_mask'] = torch.zeros(
+            max_tokens, 1, dtype=torch.bool, device=device)
 
         return input_buffers
 
@@ -127,6 +132,29 @@ class CudaGraphMixin:
                     1, max_num_tokens, emb_size)
             input_buffers['inputs_embeds'][:, :num_tokens] = inputs_embeds
 
+        cross_attn_metadata = kwargs.get('cross_attn_metadata', None)
+        full_text_row_masked_out_mask = kwargs.get(
+            'full_text_row_masked_out_mask', None)
+        if cross_attn_metadata is not None:
+            if cross_attn_metadata.kv_seqlens.data_ptr(
+            ) != input_buffers['cross_kv_seqlens'].data_ptr():
+                input_buffers['cross_kv_seqlens'].zero_()
+            input_buffers[
+                'cross_kv_seqlens'][:
+                                    batch_size] = cross_attn_metadata.kv_seqlens  # noqa
+            if cross_attn_metadata.fill_seqlens is not None:
+                if cross_attn_metadata.fill_seqlens.data_ptr(
+                ) != input_buffers['fill_seqlens'].data_ptr():
+                    input_buffers['fill_seqlens'].zero_()
+                input_buffers[
+                    'fill_seqlens'][:
+                                    batch_size] = cross_attn_metadata.fill_seqlens  # noqa
+            if full_text_row_masked_out_mask is not None:
+                input_buffers[
+                    'full_text_row_masked_out_mask'][:
+                                                     num_tokens, :] = full_text_row_masked_out_mask  # noqa
+                kwargs.pop('full_text_row_masked_out_mask')
+
         # create inputs
         new_batch_size = next_power_of_2(batch_size)
         attn_metadata.block_offsets = input_buffers[
@@ -140,20 +168,38 @@ class CudaGraphMixin:
             past_key_values=past_key_values,
             attn_metadata=attn_metadata,
         )
-
-        cross_attn_metadata = kwargs.get('cross_attn_metadata', None)
+        # cross attn
         if cross_attn_metadata is not None:
-            # TODO: update cross_attn_metadata here
+            cross_attn_metadata.block_offsets = input_buffers[
+                'block_offsets'][:new_batch_size]
+            cross_attn_metadata.q_start_loc = input_buffers[
+                'q_start_loc'][:new_batch_size]
+            cross_attn_metadata.q_seqlens = input_buffers[
+                'q_seqlens'][:new_batch_size]
+            cross_attn_metadata.kv_seqlens = input_buffers[
+                'cross_kv_seqlens'][:new_batch_size]
+            if cross_attn_metadata.fill_seqlens is not None:
+                cross_attn_metadata.fill_seqlens = input_buffers[
+                    'fill_seqlens'][:new_batch_size]
             new_inputs['cross_attn_metadata'] = cross_attn_metadata
+            kwargs.pop('cross_attn_metadata')
 
         if is_decoding:
             new_inputs['input_ids'] = input_buffers[
                 'input_ids'][:, :new_batch_size]
             new_inputs['position_ids'] = input_buffers[
                 'position_ids'][:, :new_batch_size]
+            if full_text_row_masked_out_mask is not None:
+                full_text_row_masked_out_mask = input_buffers[
+                    'full_text_row_masked_out_mask'][:new_batch_size, :]
+                new_inputs[
+                    'full_text_row_masked_out_mask'] = full_text_row_masked_out_mask  # noqa
         else:
             new_inputs['input_ids'] = input_buffers['input_ids']
             new_inputs['position_ids'] = input_buffers['position_ids']
+            if full_text_row_masked_out_mask is not None:
+                new_inputs['full_text_row_masked_out_mask'] = input_buffers[
+                    'full_text_row_masked_out_mask']
 
         if inputs_embeds is not None:
             if is_decoding:
