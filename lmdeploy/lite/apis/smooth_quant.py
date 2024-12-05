@@ -91,12 +91,12 @@ def smooth_quant(model: str,
         setattr(parent, child_name, q_norm)
         norm.to('cpu')
 
+    model.config.update(
+        dict(quantization_config=dict(quant_method='smooth_quant')))
     if vl_model:
         from .auto_awq import save_vl_model
         save_vl_model(vl_model, model_path, work_dir)
     else:
-        model.config.update(
-            dict(quantization_config=dict(quant_method='smooth_quant')))
         model.save_pretrained(work_dir,
                               max_shard_size='2GB',
                               safe_serialization=False)
