@@ -54,6 +54,10 @@ def auto_gptq(model: str,
     SUPPORTED_MODELS.append('internlm2')
     GPTQ_CAUSAL_LM_MODEL_MAP.update(dict(internlm2=InternLM2GPTQForCausalLM))
 
+    from ..modeling.internlm3_moe_gptq import InternLM3MoEGPTQForCausalLM
+    SUPPORTED_MODELS.append('InternLM3_MoE')
+    GPTQ_CAUSAL_LM_MODEL_MAP.update(dict(InternLM3_MoE=InternLM3MoEGPTQForCausalLM))
+
     pretrained_model_dir = model
     quantized_model_dir = work_dir
 
@@ -85,6 +89,7 @@ def auto_gptq(model: str,
     # the model will always be loaded into CPU memory
     model = AutoGPTQForCausalLM.from_pretrained(pretrained_model_dir,
                                                 quantize_config,
+                                                torch_dtype=torch.bfloat16,
                                                 revision=revision,
                                                 trust_remote_code=True)
 
