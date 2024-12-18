@@ -69,7 +69,7 @@ HEAD_NAME_MAP = {
     'MixtralForCausalLM': 'lm_head',
     'Qwen2VLForConditionalGeneration': 'lm_head',
     'MistralForCausalLM': 'lm_head',
-    'InternLM3MoEForCausalLM': 'output',
+    'InternLM3MoEForCausalLM': 'lm_head',
 }
 
 

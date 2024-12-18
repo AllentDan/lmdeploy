@@ -51,8 +51,10 @@ NORM_FCS_MAP = {
         ['block_sparse_moe.experts.{i}.w1', 'block_sparse_moe.experts.{i}.w3']
     },
     'InternLM3MoEDecoderLayer': {
-        'attention_norm': ['attention.wqkv'],
-        'ffn_norm': ['feed_forward.experts.fused_w1w3']
+        'input_layernorm':
+        ['self_attn.k_proj', 'self_attn.q_proj', 'self_attn.v_proj'],
+        'post_attention_layernorm':
+        ['mlp.experts.{i}.w1', 'mlp.experts.{i}.w3']
     },
     'Qwen2VLDecoderLayer': {
         'input_layernorm':
@@ -106,7 +108,8 @@ FC_FCS_MAP = {
         'block_sparse_moe.experts.{i}.w3': ['block_sparse_moe.experts.{i}.w2']
     },
     'InternLM3MoEDecoderLayer': {
-        'feed_forward.experts.fused_w1w3': ['feed_forward.experts.w2']
+        'self_attn.v_proj': ['self_attn.o_proj'],
+        'mlp.experts.{i}.w3': ['mlp.experts.{i}.w2']
     },
     'Qwen2VLDecoderLayer': {
         'self_attn.v_proj': ['self_attn.o_proj'],
