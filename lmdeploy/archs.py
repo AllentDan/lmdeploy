@@ -121,7 +121,8 @@ def check_vl_llm(config: dict) -> bool:
         'InternVLChatModel', 'MiniGeminiLlamaForCausalLM',
         'MGMLlamaForCausalLM', 'MiniCPMV', 'LlavaForConditionalGeneration',
         'LlavaNextForConditionalGeneration', 'Phi3VForCausalLM',
-        'Qwen2VLForConditionalGeneration'
+        'Qwen2VLForConditionalGeneration', 'MllamaForConditionalGeneration',
+        'MolmoForCausalLM'
     ])
     if arch == 'QWenLMHeadModel' and 'visual' in config:
         return True

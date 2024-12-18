@@ -96,6 +96,10 @@ class Starcoder2Attention(nn.Module):
             past_key_value[0],
             past_key_value[1],
             attn_metadata,
+            k_scales_zeros=None
+            if len(past_key_value) == 2 else past_key_value[2],
+            v_scales_zeros=None
+            if len(past_key_value) == 2 else past_key_value[3],
             inplace=True,
         )
         attn_output = attn_output.reshape(*hidden_states.shape[:-1], -1)
@@ -164,7 +168,7 @@ class Starcoder2DecoderLayer(nn.Module):
                                              dtype=dtype,
                                              device=device)
 
-        # builf MLP
+        # build MLP
         self.mlp = Starcoder2MLP(config, dtype=dtype, device=device)
 
         # build input layer norm

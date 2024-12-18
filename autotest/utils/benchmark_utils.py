@@ -7,6 +7,8 @@ import psutil
 from utils.config_utils import get_workerid
 from utils.run_restful_chat import health_check
 
+from lmdeploy.utils import is_bf16_supported
+
 DEFAULT_PORT = 23333
 GENERATION_CONFIG = ' -c 8 256 -ct 128 128 2048 128 -pt 1 128 128 2048'
 GENERATION_LONGTEXT_CONFIG = ' -c 1 --session-len 200000 -ct 1024 -pt 198000'
@@ -25,7 +27,8 @@ def generation_test(config,
     model_path = '/'.join([config.get('model_path'), model])
     log_path = config.get('log_path')
     benchmark_log = os.path.join(
-        log_path, 'benchmark_' + model.split('/')[1] + worker_id + '.log')
+        log_path,
+        'benchmark_generation_' + model.split('/')[1] + worker_id + '.log')
     benchmark_path = '/'.join([
         config.get('benchmark_path'), run_id, model,
         f'benchmark-generation-{backend}'
@@ -40,6 +43,8 @@ def generation_test(config,
     run_config = ''
     if backend == 'pytorch':
         command += ' --backend pytorch'
+        if not is_bf16_supported():
+            command += ' --dtype float16'
     else:
         if '4bit' in model:
             command += ' --model-format awq'
@@ -82,7 +87,8 @@ def throughput_test(config,
     log_path = config.get('log_path')
     dataset_path = config.get('dataset_path')
     benchmark_log = os.path.join(
-        log_path, 'benchmark_' + model.split('/')[1] + worker_id + '.log')
+        log_path,
+        'benchmark_throughput_' + model.split('/')[1] + worker_id + '.log')
     if backend == 'turbomind' and quant_policy != 0:
         benchmark_path = '/'.join([
             config.get('benchmark_path'), run_id, model,
@@ -105,6 +111,8 @@ def throughput_test(config,
         run_config = '--num-prompts 3000'
     if backend == 'pytorch':
         command += ' --backend pytorch'
+        if not is_bf16_supported():
+            command += ' --dtype float16'
     else:
         if '4bit' in model:
             command += ' --model-format awq'
@@ -144,7 +152,8 @@ def restful_test(config,
     log_path = config.get('log_path')
     dataset_path = config.get('dataset_path')
     benchmark_log = os.path.join(
-        log_path, 'benchmark_' + model.split('/')[1] + worker_id + '.log')
+        log_path,
+        'benchmark_restful_' + model.split('/')[1] + worker_id + '.log')
     if backend == 'turbomind' and quant_policy != 0:
         benchmark_path = '/'.join([
             config.get('benchmark_path'), run_id, model,
@@ -168,11 +177,11 @@ def restful_test(config,
     if not health_check(http_url):
         return False, 'server not start'
 
-    command = f'python3 benchmark/profile_restful_api.py localhost:{port} {model_path} {dataset_path} --stream-output True '  # noqa: F401, E501
+    command = f'python3 /nvme/qa_test_models/offline_pkg/profile_restful_api.py localhost:{port} {model_path} {dataset_path} --stream-output True '  # noqa: F401, E501
     if is_smoke:
         command += ' --num-prompts 200'
     else:
-        command += ' --num-prompts 2000'
+        command += ' --num-prompts 5000'
 
     for batch in [128, 256]:
         csv_path = f'{benchmark_path}/restful_batch_{batch}_1th.csv'

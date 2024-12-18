@@ -21,10 +21,9 @@ def _process_temperature_(scores: torch.Tensor, temperature: torch.Tensor):
 
 def _process_bad_words_(scores: torch.Tensor,
                         bad_words: torch.LongTensor,
+                        mask: torch.BoolTensor,
                         filter_value: float = -float('inf')):
     """process bad words."""
-    mask = bad_words >= 0
-    bad_words = bad_words.where(mask, 0)
     filtered_scores = scores.gather(1, bad_words)
     filtered_scores[mask] = filter_value
     scores.scatter_(1, bad_words, filtered_scores)
@@ -101,7 +100,8 @@ def _guided_sampling(response_formats: Tuple[Dict], scores: torch.Tensor,
                 if isinstance(schema, Dict):
                     for key in ['json_schema', 'schema']:
                         if key in schema:
-                            schema = json.dumps(schema[key])
+                            schema = json.dumps(schema[key],
+                                                ensure_ascii=False)
                 elif schema is None:
                     from .guided_process import JSON_GRAMMAR
                     schema = JSON_GRAMMAR
@@ -126,7 +126,9 @@ def _guided_sampling(response_formats: Tuple[Dict], scores: torch.Tensor,
 class SamplingInputs:
     temperature: torch.Tensor = None
     bad_words: torch.LongTensor = None
+    bad_mask: torch.BoolTensor = None
     stop_words: torch.LongTensor = None
+    stop_mask: torch.BoolTensor = None
     repetition_penalty: torch.Tensor = None
     top_k: torch.LongTensor = None
     top_p: torch.Tensor = None
@@ -199,9 +201,11 @@ class SamplingInputs:
             """get bad words."""
             max_bw_len = max(len(bw) for bw in bad_words)
             if max_bw_len == 0:
-                return None
+                return None, None
             if all(len(bw) == max_bw_len for bw in bad_words):
-                return torch.tensor(bad_words)
+                ret = torch.tensor(bad_words)
+                mask = torch.ones_like(ret, dtype=bool)
+                return ret, mask
             ret = torch.full((batch_size, max_bw_len), -1, dtype=torch.int64)
             for idx, bw in enumerate(bad_words):
                 bw_len = len(bw)
@@ -209,7 +213,10 @@ class SamplingInputs:
                     continue
                 bw = ret.new_tensor(bw)
                 ret[idx, :bw_len] = bw
-            return ret
+
+            mask = ret >= 0
+            ret = ret.where(mask, 0)
+            return ret, mask
 
         __gather_params()
 
@@ -220,8 +227,8 @@ class SamplingInputs:
 
         temperature = torch.tensor(temperature)
 
-        bad_words = __get_bad_words(bad_words)
-        stop_words = __get_bad_words(stop_words)
+        bad_words, bad_mask = __get_bad_words(bad_words)
+        stop_words, stop_mask = __get_bad_words(stop_words)
 
         max_top_k = max(top_k)
         if min(top_k) <= 0:
@@ -242,7 +249,9 @@ class SamplingInputs:
         sampling_input = cls(
             temperature=temperature,
             bad_words=bad_words,
+            bad_mask=bad_mask,
             stop_words=stop_words,
+            stop_mask=stop_mask,
             repetition_penalty=repetition_penalty,
             top_k=top_k,
             top_p=top_p,
@@ -308,7 +317,6 @@ class FusedLogitsProcessor(LogitsWarper):
 
         """
         sampling_inputs = self.sampling_inputs
-        scores = scores.clone()
 
         custom_logits_processors = self.sampling_inputs.logits_processors
         if any(custom_logits_processors):
@@ -326,17 +334,20 @@ class FusedLogitsProcessor(LogitsWarper):
 
         bad_words = sampling_inputs.bad_words
         if bad_words is not None:
-            scores = _process_bad_words_(scores, bad_words)
+            bad_mask = sampling_inputs.bad_mask
+            scores = _process_bad_words_(scores, bad_words, bad_mask)
 
         stop_words = sampling_inputs.stop_words
         if stop_words is not None:
-            stop_words = torch.where(self.ignore_eos[:, None], stop_words, -1)
-            scores = _process_bad_words_(scores, stop_words)
+            stop_mask = sampling_inputs.stop_mask
+            stop_mask = torch.where(self.ignore_eos[:, None], stop_mask, False)
+            scores = _process_bad_words_(scores, stop_words, stop_mask)
 
         scores = _guided_sampling(sampling_inputs.response_formats, scores,
                                   guided_input_ids, self.tokenizer)
         return scores
 
+    @torch.inference_mode()
     def sampling(self, logits: torch.Tensor):
         """sampling."""
         sampling_inputs = self.sampling_inputs

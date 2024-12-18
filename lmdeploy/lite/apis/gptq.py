@@ -56,7 +56,8 @@ def auto_gptq(model: str,
 
     from ..modeling.internlm3_moe_gptq import InternLM3MoEGPTQForCausalLM
     SUPPORTED_MODELS.append('InternLM3_MoE')
-    GPTQ_CAUSAL_LM_MODEL_MAP.update(dict(InternLM3_MoE=InternLM3MoEGPTQForCausalLM))
+    GPTQ_CAUSAL_LM_MODEL_MAP.update(
+        dict(InternLM3_MoE=InternLM3MoEGPTQForCausalLM))
 
     pretrained_model_dir = model
     quantized_model_dir = work_dir

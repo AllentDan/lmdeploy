@@ -103,6 +103,10 @@ class GemmaAttention(nn.Module):
             past_key_value[0],
             past_key_value[1],
             attn_metadata,
+            k_scales_zeros=None
+            if len(past_key_value) == 2 else past_key_value[2],
+            v_scales_zeros=None
+            if len(past_key_value) == 2 else past_key_value[3],
             inplace=True,
         )
         attn_output = attn_output.reshape(*hidden_states.shape[:-1], -1)
@@ -173,7 +177,7 @@ class GemmaDecoderLayer(nn.Module):
                                         dtype=dtype,
                                         device=device)
 
-        # builf MLP
+        # build MLP
         self.mlp = GemmaMLP(config, dtype=dtype, device=device)
 
         # build input layer norm
@@ -379,6 +383,8 @@ class GemmaForCausalLM(nn.Module, CudaGraphMixin):
                                             bias=False,
                                             dtype=dtype,
                                             device=device)
+        self.final_logit_softcapping = getattr(config,
+                                               'final_logit_softcapping', None)
 
     def forward(
         self,
@@ -401,7 +407,12 @@ class GemmaForCausalLM(nn.Module, CudaGraphMixin):
 
     def get_logits(self, hidden_states: torch.Tensor):
         """compute logits of the model output."""
-        return self.lm_head(hidden_states)
+        logits = self.lm_head(hidden_states)
+        if self.final_logit_softcapping is not None:
+            logits = logits / self.final_logit_softcapping
+            logits = torch.tanh(logits)
+            logits = logits * self.final_logit_softcapping
+        return logits
 
     def get_input_embeddings(self):
         """get input embeddings."""

@@ -51,10 +51,8 @@ NORM_FCS_MAP = {
         ['block_sparse_moe.experts.{i}.w1', 'block_sparse_moe.experts.{i}.w3']
     },
     'InternLM3MoEDecoderLayer': {
-        'attention_norm':
-        ['attention.wqkv'],
-        'ffn_norm':
-        ['feed_forward.experts.fused_w1w3']
+        'attention_norm': ['attention.wqkv'],
+        'ffn_norm': ['feed_forward.experts.fused_w1w3']
     },
     'Qwen2VLDecoderLayer': {
         'input_layernorm':
@@ -108,8 +106,7 @@ FC_FCS_MAP = {
         'block_sparse_moe.experts.{i}.w3': ['block_sparse_moe.experts.{i}.w2']
     },
     'InternLM3MoEDecoderLayer': {
-        'feed_forward.experts.fused_w1w3':
-        ['feed_forward.experts.w2']
+        'feed_forward.experts.fused_w1w3': ['feed_forward.experts.w2']
     },
     'Qwen2VLDecoderLayer': {
         'self_attn.v_proj': ['self_attn.o_proj'],
@@ -120,6 +117,16 @@ FC_FCS_MAP = {
         'mlp.up_proj': ['mlp.down_proj']
     }
 }
+
+SKIPPED_MODULE = ['lora', 'block_sparse_moe.gate']
+
+
+def skipped_module(name: str):
+    """Whether the module should be skipped from quantization."""
+    for m in SKIPPED_MODULE:
+        if m in name:
+            return True
+    return False
 
 
 @torch.no_grad()
@@ -270,13 +277,7 @@ def check_awq_supported(layer_type):
         raise NotImplementedError
 
 
-def quant_weights(model,
-                  fcs,
-                  bits,
-                  symmetry,
-                  group_size=-1,
-                  device='cuda',
-                  skip_if_contains: str = None):
+def quant_weights(model, fcs, bits, symmetry, group_size=-1, device='cuda'):
     """Quantize the weights of the target model's linear layers."""
     from lmdeploy.lite.quantization import WeightQuantizer
     from lmdeploy.lite.quantization.modules import WeightOnlyQLinear
@@ -286,7 +287,7 @@ def quant_weights(model,
         parent_name, _, child_name = name.rpartition('.')
         parent = model.get_submodule(parent_name)
         pack_or_skip = 'packed'
-        if skip_if_contains and skip_if_contains in child_name:
+        if skipped_module(name):
             q_linear = fc
             pack_or_skip = 'skipped'
         else:

@@ -17,41 +17,40 @@ on:
         required: true
         description: 'Tested TurboMind models list. eg. [internlm_chat_7b,internlm_chat_7b_w8a16]'
         type: string
-        default: '[turbomind_internlm2_chat_7b, pytorch_internlm2_chat_7b, turbomind_internlm2_5_7b_chat, pytorch_internlm2_5_7b_chat, turbomind_internlm2_5_7b_chat_batch1, turbomind_internlm2_5_20b_chat, pytorch_internlm2_5_20b_chat, turbomind_qwen1_5_7b_chat, pytorch_qwen1_5_7b_chat, turbomind_llama2_7b_chat, turbomind_llama3_8b_instruct, pytorch_llama3_8b_instruct, turbomind_llama3_1_8b_instruct, pytorch_llama3_1_8b_instruct, turbomind_qwen2_7b_instruct, pytorch_qwen2_7b_instruct, pytorch_qwen1_5_moe_2_7b_chat, pytorch_gemma_2_9b_it, turbomind_internlm2_chat_7b_4bits, turbomind_internlm2_chat_7b_kvint4, turbomind_internlm2_chat_7b_kvint8, turbomind_internlm2_5_7b_chat_4bits, turbomind_internlm2_5_7b_chat_kvint4, turbomind_internlm2_5_7b_chat_kvint8, turbomind_internlm2_5_20b_chat_4bits, turbomind_internlm2_5_20b_chat_kvint4, turbomind_internlm2_5_20b_chat_kvint8, turbomind_qwen1_5_7b_chat_4bits, turbomind_qwen1_5_7b_chat_kvint4, turbomind_qwen1_5_7b_chat_kvint8, turbomind_llama2_7b_chat_4bits, turbomind_llama2_7b_chat_kvint4, turbomind_llama2_7b_chat_kvint8, turbomind_llama3_8b_instruct_4bits, turbomind_llama3_8b_instruct_kvint4, turbomind_llama3_8b_instruct_kvint8, turbomind_llama3_1_8b_instruct_4bits, turbomind_llama3_1_8b_instruct_kvint4, turbomind_llama3_1_8b_instruct_kvint8, turbomind_qwen2_7b_instruct_4bits, turbomind_qwen2_7b_instruct_kvint8]'
+        default: '[turbomind_internlm2_chat_7b, pytorch_internlm2_chat_7b, turbomind_internlm2_5_7b_chat, pytorch_internlm2_5_7b_chat, turbomind_internlm2_5_7b_chat_batch1, turbomind_internlm2_5_7b_chat_batch1_4bits, turbomind_internlm2_5_20b_chat, pytorch_internlm2_5_20b_chat, turbomind_qwen1_5_7b_chat, pytorch_qwen1_5_7b_chat, turbomind_llama2_7b_chat, turbomind_llama3_8b_instruct, pytorch_llama3_8b_instruct, turbomind_llama3_1_8b_instruct, pytorch_llama3_1_8b_instruct, turbomind_qwen2_7b_instruct, pytorch_qwen2_7b_instruct, pytorch_qwen1_5_moe_2_7b_chat, pytorch_gemma_2_9b_it, turbomind_internlm2_chat_7b_4bits, turbomind_internlm2_chat_7b_kvint4, turbomind_internlm2_chat_7b_kvint8, turbomind_internlm2_5_7b_chat_4bits, turbomind_internlm2_5_7b_chat_kvint4, turbomind_internlm2_5_7b_chat_kvint8, turbomind_internlm2_5_20b_chat_4bits, turbomind_internlm2_5_20b_chat_kvint4, turbomind_internlm2_5_20b_chat_kvint8, turbomind_qwen1_5_7b_chat_4bits, turbomind_qwen1_5_7b_chat_kvint4, turbomind_qwen1_5_7b_chat_kvint8, turbomind_llama2_7b_chat_4bits, turbomind_llama2_7b_chat_kvint4, turbomind_llama2_7b_chat_kvint8, turbomind_llama3_8b_instruct_4bits, turbomind_llama3_8b_instruct_kvint4, turbomind_llama3_8b_instruct_kvint8, turbomind_llama3_1_8b_instruct_4bits, turbomind_llama3_1_8b_instruct_kvint4, turbomind_llama3_1_8b_instruct_kvint8, turbomind_qwen2_7b_instruct_4bits, turbomind_qwen2_7b_instruct_kvint8]'
       chat_datasets:
         required: true
         description: 'Tested datasets list. eg. [*bbh_datasets,*ceval_datasets,*cmmlu_datasets,*GaokaoBench_datasets,*gpqa_datasets,*gsm8k_datasets,*hellaswag_datasets,*humaneval_datasets,*ifeval_datasets,*math_datasets,*sanitized_mbpp_datasets,*mmlu_datasets,*nq_datasets,*race_datasets,*TheoremQA_datasets,*triviaqa_datasets,*winogrande_datasets,*crowspairs_datasets]'
         type: string
-        default: '[*mmlu_datasets, *gsm8k_datasets]'
+        default: '[*mmlu_datasets, *gsm8k_datasets, *ifeval_datasets]'
       base_models:
         required: true
-        description: 'Tested TurboMind models list. eg. [turbomind_internlm2_5_7b, turbomind_qwen2_7b]'
+        description: 'Tested TurboMind models list. eg. [turbomind_internlm2_5_7b, turbomind_qwen2_7b, turbomind_internlm2_5_7b_batch1]'
         type: string
-        default: '[turbomind_internlm2_5_7b, turbomind_qwen2_7b]'
+        default: '[turbomind_internlm2_5_7b, turbomind_internlm2_5_7b_4bits, turbomind_internlm2_5_7b_batch1, turbomind_internlm2_5_7b_batch1_4bits, turbomind_qwen2_7b, turbomind_qwen2_5_7b, turbomind_qwen2_5_14b]'
       baes_datasets:
         required: true
         description: 'Tested datasets list. eg. [*mmlu_datasets, *gsm8k_datasets]'
         type: string
-        default: '[*mmlu_datasets, *gsm8k_datasets]'
-      local_config:
-        required: true
-        description: 'Whether use local eval config'
-        type: boolean
-        default: false
+        default: '[*mmlu_datasets, *gsm8k_datasets, *gpqa_datasets, *winogrande_datasets]'
+      oc_repo_org:
+        required: false
+        description: 'Tested repository organization name. Default is open-compass/opencompass'
+        type: string
+        default: 'open-compass/opencompass'
+      oc_repo_ref:
+        required: false
+        description: 'Set branch or tag or commit id. Default is "main"'
+        type: string
+        default: 'main'
       offline_mode:
         required: true
         description: 'Whether start a offline mode, if true, you should prepare code and whl package by yourself'
         type: boolean
         default: false
-      dependency_pkgs:
-        required: true
-        description: 'Dependency packages, you can also set a specific version'
-        type: string
-        default: 'pynvml packaging protobuf transformers_stream_generator transformers human_eval mmengine-lite==0.10.5'
 
 env:
   ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
-  dependency_pkgs: ${{inputs.dependency_pkgs || 'pynvml packaging protobuf transformers_stream_generator transformers human_eval mmengine-lite==0.10.5'}}
 
 jobs:
   linux-build:
@@ -136,7 +135,7 @@ jobs:
           # the install packeage from. https://github.com/Dao-AILab/flash-attention/releases
           python3 -m pip install /root/packages/flash_attn-2.6.3+cu118torch2.3cxx11abiFALSE-cp310-cp310-linux_x86_64.whl
           python3 -m pip install /root/packages/xformers-0.0.27+cu118-cp310-cp310-manylinux2014_x86_64.whl --no-deps
-          python3 -m pip install ${{env.dependency_pkgs}}
+          python3 -m pip install -r /root/models/offline_pkg/requirements.txt
       - name: Install lmdeploy
         if: ${{github.event_name == 'schedule' || !inputs.offline_mode}}
         run: |
@@ -149,8 +148,9 @@ jobs:
           python3 -m pip install -r requirements/test.txt
       - name: Install opencompass
         run: |
-          git clone --depth=1 https://github.com/open-compass/opencompass.git
+          git clone https://github.com/${{ github.event.inputs.oc_repo_org}}.git
           cd opencompass
+          git checkout ${{ github.event.inputs.oc_repo_ref}}
           python3 -m pip install -e .
           echo "OPENCOMPASS_DIR=$(pwd)" >> $GITHUB_ENV
       - name: Check env
@@ -162,9 +162,6 @@ jobs:
         run: |
           ln -s /root/opencompass-data ./data
           python3 .github/scripts/action_tools.py create_model_links /root/models .
-      - name: Use local config
-        if: ${{inputs.local_config}}
-        run: cp /root/models/offline_pkg/eval_config.py .github/scripts/eval_opencompass_config.py
       - name: Evaluate chat models
         if: matrix.evaluate_type == 'chat'
         run: |

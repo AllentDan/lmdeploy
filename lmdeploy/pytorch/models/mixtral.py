@@ -91,6 +91,10 @@ class MixtralAttention(nn.Module):
             past_key_value[0],
             past_key_value[1],
             attn_metadata,
+            k_scales_zeros=None
+            if len(past_key_value) == 2 else past_key_value[2],
+            v_scales_zeros=None
+            if len(past_key_value) == 2 else past_key_value[3],
             inplace=True,
         )
         attn_output = attn_output.reshape(*hidden_states.shape[:-1], -1)
@@ -335,17 +339,6 @@ class MixtralForCausalLM(nn.Module, CudaGraphMixin):
     def get_logits(self, hidden_states: torch.Tensor):
         """compute logits of the model output."""
         return self.lm_head(hidden_states)
-
-    def support_cuda_graph(
-        self,
-        input_ids: torch.Tensor,
-        **kwargs,
-    ):
-        """support cudagraph."""
-        seq_lens = input_ids.size(1)
-        if seq_lens <= 512:
-            return True
-        return False
 
     def get_input_embeddings(self):
         """get input embeddings."""

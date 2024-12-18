@@ -98,6 +98,10 @@ class Phi3Attention(nn.Module):
             past_key_value[0],
             past_key_value[1],
             attn_metadata,
+            k_scales_zeros=None
+            if len(past_key_value) == 2 else past_key_value[2],
+            v_scales_zeros=None
+            if len(past_key_value) == 2 else past_key_value[3],
             inplace=True,
         )
         attn_output = attn_output.reshape(*hidden_states.shape[:-1], -1)
@@ -161,7 +165,7 @@ class Phi3DecoderLayer(nn.Module):
         # build attention layer
         self.self_attn = Phi3Attention(config, dtype=dtype, device=device)
 
-        # builf MLP
+        # build MLP
         self.mlp = Phi3MLP(config, dtype=dtype, device=device)
 
         # build input layer norm
@@ -431,7 +435,3 @@ class Phi3ForCausalLM(nn.Module, CudaGraphMixin):
             else:
                 param = params_dict[name]
                 load_weight(param, loaded_weight)
-
-
-class Phi3VForCausalLM(Phi3ForCausalLM):
-    ...

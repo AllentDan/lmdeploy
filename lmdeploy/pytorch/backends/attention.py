@@ -1,7 +1,7 @@
 # Copyright (c) OpenMMLab. All rights reserved.
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Generic, TypeVar
+from typing import Generic, Literal, TypeVar
 
 import torch
 
@@ -14,6 +14,8 @@ class AttentionMetadata:
     q_start_loc: torch.Tensor = None
     q_seqlens: torch.Tensor = None
     kv_seqlens: torch.Tensor = None
+    fill_seqlens: torch.Tensor = None
+    quant_policy: Literal[0, 4, 8] = 0
 
 
 T = TypeVar('T', bound=AttentionMetadata)
@@ -32,6 +34,7 @@ class AttentionImpl(ABC, Generic[T]):
         alibi: bool = None,
         sliding_window: int = None,
         logit_softcapping: float = None,
+        causal: bool = True,
         **kwargs,
     ) -> None:
         if scale is None:
@@ -51,6 +54,7 @@ class AttentionImpl(ABC, Generic[T]):
         self.alibi = alibi
         self.sliding_window = sliding_window
         self.logit_softcapping = logit_softcapping
+        self.causal = causal
 
     @abstractmethod
     def forward(
@@ -80,6 +84,7 @@ class AttentionBuilder(ABC, Generic[T]):
         alibi: bool = False,
         sliding_window: int = None,
         logical_softcapping: float = None,
+        causal: bool = True,
         **kwargs,
     ) -> AttentionImpl[T]:
         """build."""

@@ -358,16 +358,16 @@ class ArgumentHelper:
 
         return parser.add_argument(
             '--search-scale',
-            type=bool,
+            action='store_true',
             default=False,
             help=\
-            'Whether search scale ratio. Default to False, which means only smooth quant with 0.5 ratio will be applied'  # noqa
+            'Whether search scale ratio. Default to be disabled, which means only smooth quant with 0.5 ratio will be applied'  # noqa
         )
 
     @staticmethod
     def device(parser,
                default: str = 'cuda',
-               choices: List[str] = ['cuda', 'ascend']):
+               choices: List[str] = ['cuda', 'ascend', 'maca']):
         """Add argument device to parser."""
 
         return parser.add_argument('--device',
@@ -495,3 +495,13 @@ class ArgumentHelper:
                                    default=False,
                                    help="Disable FastAPI's OpenAPI schema,"
                                    ' Swagger UI, and ReDoc endpoint')
+
+    @staticmethod
+    def eager_mode(parser):
+        """Add argument eager_mode to parser."""
+
+        return parser.add_argument('--eager-mode',
+                                   action='store_true',
+                                   default=False,
+                                   help='Whether to enable eager mode. '
+                                   'If True, cuda graph would be disabled')

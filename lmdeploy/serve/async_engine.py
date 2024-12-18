@@ -4,6 +4,7 @@ import dataclasses
 import json
 import os
 import random
+import re
 from contextlib import asynccontextmanager
 from copy import deepcopy
 from itertools import count
@@ -222,9 +223,10 @@ class AsyncEngine(LogitsMixin):
         """Inference a batch of prompts.
 
         Args:
-            prompts (List[str] | str | List[Dict] | List[Dict]): a batch of
-                prompts. It accepts: string prompt, a list of string prompts,
-                a chat history in OpenAI format or a list of chat history.
+            prompts (List[str] | str | List[Dict] | List[List[Dict]]]): a
+            batch of prompts. It accepts: string prompt, a list of string
+            prompts, a chat history in OpenAI format or a list of chat
+            history.
             gen_config (GenerationConfig | None): a instance of
                 GenerationConfig. Default to None.
             do_preprocess (bool): whether pre-process the messages. Default to
@@ -296,9 +298,10 @@ class AsyncEngine(LogitsMixin):
         """Inference a batch of prompts.
 
         Args:
-            prompts (List[str] | str | List[Dict] | List[Dict]): a batch of
-                prompts. It accepts: string prompt, a list of string prompts,
-                a chat history in OpenAI format or a list of chat history.
+            prompts (List[str] | str | List[Dict] | List[List[Dict]]]): a
+            batch of prompts. It accepts: string prompt, a list of string
+            prompts, a chat history in OpenAI format or a list of chat
+            history.
             gen_config (GenerationConfig | None): a instance of or a list of
                 GenerationConfig. Default to None.
             do_preprocess (bool): whether pre-process the messages. Default to
@@ -373,9 +376,10 @@ class AsyncEngine(LogitsMixin):
         """Inference a batch of prompts with stream mode.
 
         Args:
-            prompts (List[str] | str | List[Dict] | List[Dict]): a batch of
-                prompts. It accepts: string prompt, a list of string prompts,
-                a chat history in OpenAI format or a list of chat history.
+            prompts (List[str] | str | List[Dict] | List[List[Dict]]]):a
+            batch of prompts. It accepts: string prompt, a list of string
+            prompts, a chat history in OpenAI format or a list of chat
+            history.
             gen_config (GenerationConfig | None): a instance of or a list of
                 GenerationConfig. Default to None.
             do_preprocess (bool): whether pre-process the messages. Default to
@@ -455,6 +459,10 @@ class AsyncEngine(LogitsMixin):
             prompt = chat_template.messages2prompt(prompt,
                                                    sequence_start,
                                                    tools=tools)
+        if prompt is None:
+            raise ValueError(
+                f'You are using base template to handle chat task. Please specify a `--chat-template` name chosen from `lmdeploy list` if you want to use OpenAI messages input.'  # noqa
+            )
         input_ids = self.tokenizer.encode(prompt, add_bos=sequence_start)
         return {'prompt': prompt, 'input_ids': input_ids}
 
@@ -497,6 +505,12 @@ class AsyncEngine(LogitsMixin):
         if gen_config.stop_token_ids is None:
             gen_config.stop_token_ids = self.stop_words
         if not gen_config.do_sample:
+            logger.warn(f'GenerationConfig: {gen_config}')
+            logger.warn(
+                'Since v0.6.0, lmdeploy add `do_sample` in '
+                'GenerationConfig. It defaults to False, meaning greedy '
+                'decoding. Please set `do_sample=True` if sampling '
+                ' decoding is needed')
             # greedy decode
             gen_config.top_k = 1
             # avoid unnecessary process
@@ -635,16 +649,40 @@ class AsyncEngine(LogitsMixin):
             action = action.split('<|action_end|>'.strip())[0]
             action = action[action.find('{'):]
             action = json.loads(action)
-            name, parameters = action['name'], json.dumps(
-                action.get('parameters', action.get('arguments', {})))
+            name, parameters = action['name'], json.dumps(action.get(
+                'parameters', action.get('arguments', {})),
+                                                          ensure_ascii=False)
+            call_info_list = [(name, parameters)]
         elif '<function=' in text:  # llama3.1
             action, _ = text.split('</function>')
             parameters = action[action.find('{'):]
             name = action.split('<function=')[1].split('>{')[0]
+            call_info_list = [(name, parameters)]
+        elif '<tool_call>' in text and '</tool_call>' in text:  # qwen2.5
+            # get tool_call in text
+            pattern = r'<tool_call>(.*?)</tool_call>'
+            match_result_list = re.findall(pattern, text, re.DOTALL)
+            call_info_list = []
+            for match_result in match_result_list:
+                action = json.loads(match_result)
+                call_info_list.append((action['name'],
+                                       json.dumps(action['arguments'],
+                                                  ensure_ascii=False)))
+            # get text outside of tags
+            if not text.startswith('<tool_call>'):
+                text = text[:text.find('<tool_call>')]
+            elif not text.endswith('</tool_call>'):
+                text = text[text.rfind('</tool_call>') + len('</tool_call>'):]
+            else:
+                text = ''
+
         else:
             raise RuntimeError(f'Unexpected model response: {text}')
-        action_id = [tool.function.name for tool in tools].index(name)
-        return text, action_id, name, parameters
+
+        call_info_list = [([tool.function.name for tool in tools
+                            ].index(call_info[0]), call_info[0], call_info[1])
+                          for call_info in call_info_list]
+        return text, call_info_list
 
     def chat(self,
              prompt: str,

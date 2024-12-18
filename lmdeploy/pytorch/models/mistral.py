@@ -95,6 +95,10 @@ class MistralAttention(nn.Module):
             past_key_value[0],
             past_key_value[1],
             attn_metadata,
+            k_scales_zeros=None
+            if len(past_key_value) == 2 else past_key_value[2],
+            v_scales_zeros=None
+            if len(past_key_value) == 2 else past_key_value[3],
             inplace=True,
         )
         attn_output = attn_output.reshape(*hidden_states.shape[:-1], -1)
@@ -158,7 +162,7 @@ class MistralDecoderLayer(nn.Module):
         # build attention layer
         self.self_attn = MistralAttention(config, dtype=dtype, device=device)
 
-        # builf MLP
+        # build MLP
         self.mlp = MistralMLP(config, dtype=dtype, device=device)
 
         # build input layer norm
@@ -416,22 +420,3 @@ class MistralForCausalLM(nn.Module, CudaGraphMixin):
             else:
                 param = params_dict[name]
                 load_weight(param, loaded_weight)
-
-
-class LlavaMistralForCausalLM(MistralForCausalLM):
-    """llava forcausallm."""
-
-    def load_weights(self, weights: Iterable[Tuple[str, torch.Tensor]]):
-        """load weights."""
-
-        new_weights = dict()
-        for key, val in weights:
-            if key.startswith('model.vision_tower'):
-                continue
-            if key.startswith('model.mm_projector'):
-                continue
-            if key.startswith('model.image_newline'):
-                continue
-            new_weights[key] = val
-
-        super().load_weights(new_weights.items())
