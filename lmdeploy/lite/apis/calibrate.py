@@ -269,7 +269,7 @@ def calibrate(model: str,
             f'not supported. The supported model types are '
             f"{', '.join(LAYER_TYPE_MAP.keys())}.")
 
-    if model_type in ['MixtralForCausalLM']:
+    if model_type in ['MixtralForCausalLM', 'InternLM3MoEForCausalLM']:
         update_moe_mapping(model, model_type)
 
     if model_type == 'QWenLMHeadModel':
