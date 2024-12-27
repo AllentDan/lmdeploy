@@ -56,7 +56,7 @@ NORM_FCS_MAP = {
         'input_layernorm':
         ['self_attn.k_proj', 'self_attn.q_proj', 'self_attn.v_proj'],
         'post_attention_layernorm':
-        ['mlp.experts.{i}.w1', 'mlp.experts.{i}.w3']
+        ['mlp.gate', 'mlp.experts.{i}.w1', 'mlp.experts.{i}.w3']
     },
     'Qwen2VLDecoderLayer': {
         'input_layernorm':
@@ -123,7 +123,7 @@ FC_FCS_MAP = {
     }
 }
 
-SKIPPED_MODULE = ['lora', 'block_sparse_moe.gate']
+SKIPPED_MODULE = ['lora', 'block_sparse_moe.gate', 'mlp.gate']
 
 
 def skipped_module(name: str):
