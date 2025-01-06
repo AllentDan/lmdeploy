@@ -20,8 +20,9 @@ NORM_FCS_MAP = {
         'ffn_norm': ['feed_forward.w1', 'feed_forward.w3']
     },
     'InternLM3DecoderLayer': {
-        'attention_norm': ['attention.wqkv', 'attention.wq'],
-        'ffn_norm': ['feed_forward.w1', 'feed_forward.w3']
+        'input_layernorm':
+        ['self_attn.k_proj', 'self_attn.q_proj', 'self_attn.v_proj'],
+        'post_attention_layernorm': ['mlp.gate_proj', 'mlp.up_proj']
     },
     'QWenBlock': {
         'ln_1': ['attn.c_attn'],
@@ -85,7 +86,8 @@ FC_FCS_MAP = {
         'feed_forward.w3': ['feed_forward.w2']
     },
     'InternLM3DecoderLayer': {
-        'feed_forward.w3': ['feed_forward.w2']
+        'self_attn.v_proj': ['self_attn.o_proj'],
+        'mlp.up_proj': ['mlp.down_proj']
     },
     'QWenBlock': {
         'attn.c_attn': ['attn.c_proj'],
