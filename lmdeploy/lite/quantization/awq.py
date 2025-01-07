@@ -325,6 +325,7 @@ def quant_weights(model, fcs, bits, symmetry, group_size=-1, device='cuda'):
                                                          scales, zeros))
         setattr(parent, child_name, q_linear)
         fc.to('cpu')
+        torch.cuda.empty_cache()
 
         print(f'{name} weight {pack_or_skip}.')
 
@@ -366,7 +367,10 @@ def smooth_layers(layers,
             smooth_fc_fcs(fc, fcs, a_scales[a_name], group_size)
 
         layer.to('cpu')
-        print(f'{l_name} smooth weight done.')
+        torch.cuda.empty_cache()
+        max_memory = torch.cuda.max_memory_allocated() / 1024 / 1024 / 1024
+        print(f'{l_name} smooth weight done.'
+              f' max gpu memory: {max_memory:.2f} GB')
 
 
 def pseudo_quantize_tensor(w,
@@ -434,4 +438,7 @@ def awq_layers(layers,
             smooth_fc_fcs(fc, fcs, a_scales[a_name], group_size, ratio)
 
         layer.to('cpu')
-        print(f'{l_name} smooth weight done.')
+        torch.cuda.empty_cache()
+        max_memory = torch.cuda.max_memory_allocated() / 1024 / 1024 / 1024
+        print(f'{l_name} smooth weight done.'
+              f' max gpu memory: {max_memory:.2f} GB')
